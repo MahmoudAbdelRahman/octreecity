@@ -1,0 +1,271 @@
+<title>OctreeCity Tile Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;750&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed 3D stage on the left, a narrow instrument panel on the right; stacks on phones. */
+:root {
+  --bg: #0f1318;
+  --panel: #161b22;
+  --line: #2a323d;
+  --fg: #e6e9ee;
+  --muted: #8b95a3;
+  --accent: #f2a65a;
+  --l0: #f2a65a; --l1: #e9cf6e; --l2: #a6cf8a; --l3: #5fb8a8; --l4: #4f8fc4; --l5: #6b6fc9;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--display); margin: 0; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100%; }
+.stage { position: relative; min-width: 0; min-height: 0; }
+#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hud { position: absolute; left: 16px; top: 14px; font: 500 12px/1.4 var(--mono); color: var(--muted); pointer-events: none; }
+.hud b { color: var(--fg); font-weight: 500; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; font: 13px var(--mono); color: var(--muted); }
+aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding-block: 18px 24px; padding-inline: 18px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+h1 { font-size: 19px; font-weight: 750; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 4px 0 0; }
+.label { font: 500 10.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { background: transparent; color: var(--muted); border: 0; padding: 9px 8px; font: 600 13px var(--display); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #1b1307; }
+.seg button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.desc { font-size: 12.5px; line-height: 1.5; color: var(--muted); margin: 8px 0 0; }
+.row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.row input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.row .val { font: 12px var(--mono); color: var(--fg); width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+.checks { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+.big { display: flex; align-items: baseline; gap: 8px; }
+.big .n { font: 600 26px var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.big .u { color: var(--muted); font-size: 12px; }
+.bars { display: flex; flex-direction: column; gap: 5px; }
+.bar { display: grid; grid-template-columns: 44px minmax(0, 1fr) 64px; gap: 8px; align-items: center; font: 11.5px var(--mono); font-variant-numeric: tabular-nums; }
+.bar .k { color: var(--muted); }
+.bar .track { height: 12px; background: #1e252e; border-radius: 2px; overflow: hidden; position: relative; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 2px; }
+.bar .v { text-align: right; color: var(--fg); }
+.note { font-size: 12.5px; line-height: 1.55; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; margin: 0; }
+.note b { color: var(--fg); font-weight: 600; }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; }
+  aside { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <div class="stage">
+    <canvas id="gl" aria-label="3D view of the octree cells of one Osaka tile"></canvas>
+    <div class="hud" id="hud">drag to orbit · scroll to zoom · right-drag to pan</div>
+    <div class="loading" id="loading">decoding octree…</div>
+  </div>
+  <aside>
+    <div>
+      <h1>Osaka tile <span id="t-tile"></span>, as octree cells</h1>
+      <p class="sub" id="t-sub"></p>
+    </div>
+
+    <div>
+      <div class="label">Octree</div>
+      <div class="seg" role="group" aria-label="Octree version">
+        <button id="m-plain" aria-pressed="true">Plain</button>
+        <button id="m-mesh" aria-pressed="false">Meshing</button>
+      </div>
+      <p class="desc" id="m-desc"></p>
+    </div>
+
+    <div>
+      <div class="label">Section through the air</div>
+      <div class="row"><label for="slice">y</label><input id="slice" type="range" min="0" max="255" value="61"><span class="val" id="slice-v"></span></div>
+      <div class="checks" style="margin-top:10px">
+        <label><input type="checkbox" id="cut" checked> Cut buildings in front of the section</label>
+        <label><input type="checkbox" id="airgrid" checked> Show air cells on the section</label>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">Leaves in this tile</div>
+      <div class="big"><span class="n" id="n-leaves"></span><span class="u" id="n-ratio"></span></div>
+      <div class="bars" id="hist" style="margin-top:10px"></div>
+    </div>
+
+    <div>
+      <div class="label">Storage for this tile</div>
+      <div class="bars" id="store"></div>
+    </div>
+
+    <p class="note" id="note"></p>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>/*DATA*/</script>
+<script>
+(function () {
+  const D = window.OCTREE_DATA;
+  const css = getComputedStyle(document.documentElement);
+  const LV = [0, 1, 2, 3, 4, 5].map(i => css.getPropertyValue('--l' + i).trim());
+  const [NX, NY, NZ] = D.shape, L = D.max_level;
+
+  function b64(s) { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+  function enc(x, y, z) { let c = 0; for (let b = 0; b < 10; b++) c += (((x >> b) & 1) + 2 * ((y >> b) & 1) + 4 * ((z >> b) & 1)) * Math.pow(8, b); return c; }
+
+  /* Rebuild every leaf from the on-disk stream (level, label): codes are a running sum of 8^level inside each root cube. */
+  function decode(P) {
+    const lev = b64(P.level), lab = b64(P.label), n = lev.length, S = 1 << L, R = Math.pow(8, L);
+    const roots = [];
+    for (let x = 0; x < NX; x += S) for (let y = 0; y < NY; y += S) for (let z = 0; z < NZ; z += S) roots.push(enc(x, y, z));
+    roots.sort((a, b) => a - b);
+    const X = new Uint16Array(n), Y = new Uint16Array(n), Z = new Uint16Array(n);
+    let off = 0;
+    for (let i = 0; i < n; i++) {
+      const code = roots[Math.floor(off / R)] + (off % R);
+      let x = 0, y = 0, z = 0, c = code;
+      for (let b = 0; c > 0; b++) { const t = c % 8; x |= (t & 1) << b; y |= ((t >> 1) & 1) << b; z |= ((t >> 2) & 1) << b; c = Math.floor(c / 8); }
+      X[i] = x; Y[i] = y; Z[i] = z;
+      off += Math.pow(8, lev[i]);
+    }
+    return { X, Y, Z, lev, lab, n };
+  }
+
+  const canvas = document.getElementById('gl');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.localClippingEnabled = true;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(css.getPropertyValue('--bg').trim());
+  const camera = new THREE.PerspectiveCamera(40, 1, 1, 4000);
+  camera.position.set(-170, 230, 330);
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.target.set(128, 15, 128);
+  controls.enableDamping = true;
+  scene.add(new THREE.HemisphereLight(0xdfe8f5, 0x2a2420, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(-1, 2.2, 0.6); scene.add(sun);
+
+  /* world axes: X = x (east), Y = height z, Z = y (north) */
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(NX, NY), new THREE.MeshLambertMaterial({ color: 0x3a3228 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(NX / 2, 0.98, NY / 2); scene.add(ground);
+  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(NX, NZ, NY)), new THREE.LineBasicMaterial({ color: 0x2f3946 }));
+  frame.position.set(NX / 2, NZ / 2, NY / 2); scene.add(frame);
+
+  const clip = new THREE.Plane(new THREE.Vector3(0, 0, 1), -61);
+  const boxMat = new THREE.MeshLambertMaterial({ vertexColors: false, clippingPlanes: [clip] });
+  const sectionMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
+  const planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(NX, NZ), new THREE.MeshBasicMaterial({ color: 0x9fb3c8, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
+  scene.add(planeMesh);
+
+  const trees = {}; let mode = 'plain', inst = null, section = null;
+
+  function buildInstances(T) {
+    let nb = 0; for (let i = 0; i < T.n; i++) if (T.lab[i] === 2) nb++;
+    const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), boxMat, nb);
+    const M = new THREE.Matrix4(), col = new THREE.Color(), gap = 0.14;
+    let k = 0;
+    for (let i = 0; i < T.n; i++) {
+      if (T.lab[i] !== 2) continue;
+      const s = 1 << T.lev[i];
+      M.makeScale(s - gap, s - gap, s - gap);
+      M.setPosition(T.X[i] + s / 2, T.Z[i] + s / 2, T.Y[i] + s / 2);
+      m.setMatrixAt(k, M); m.setColorAt(k, col.set(LV[T.lev[i]])); k++;
+    }
+    m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true;
+    return m;
+  }
+
+  function buildSection(T, yp) {
+    const pos = [], cols = [], col = new THREE.Color();
+    const zq = yp + 0.5;
+    for (let i = 0; i < T.n; i++) {
+      if (T.lab[i] !== 0) continue;
+      const s = 1 << T.lev[i];
+      if (T.Y[i] > yp || T.Y[i] + s <= yp) continue;
+      const x0 = T.X[i], x1 = x0 + s, z0 = T.Z[i], z1 = z0 + s;
+      pos.push(x0, z0, zq, x1, z0, zq, x1, z0, zq, x1, z1, zq, x1, z1, zq, x0, z1, zq, x0, z1, zq, x0, z0, zq);
+      col.set(LV[T.lev[i]]);
+      for (let j = 0; j < 8; j++) cols.push(col.r, col.g, col.b);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    return new THREE.LineSegments(g, sectionMat);
+  }
+
+  const $ = id => document.getElementById(id);
+  const fmt = n => n.toLocaleString('en-US');
+  const DESC = {
+    plain: 'Eight equal neighbours merge into one bigger cube. Air far from buildings becomes 8 to 32 m cubes; walls and roofs stay at 1 m.',
+    mesh: 'Same city, refined for simulation: every cell within 8 m of a building or the ground is at most 2 m, and neighbours differ by at most one size step (2:1 rule).'
+  };
+
+  function sliceY() { return +$('slice').value; }
+
+  function refreshSection() {
+    if (section) { scene.remove(section); section.geometry.dispose(); section = null; }
+    const y = sliceY();
+    clip.constant = $('cut').checked ? -y : 1e6;
+    planeMesh.position.set(NX / 2, NZ / 2, y + 0.5);
+    planeMesh.visible = $('airgrid').checked;
+    $('slice-v').textContent = y + ' m';
+    if ($('airgrid').checked) { section = buildSection(trees[mode], y); scene.add(section); }
+  }
+
+  function bars(el, rows, max) {
+    el.innerHTML = rows.map(r => `<div class="bar"><span class="k">${r.k}</span><span class="track"><span class="fill" style="width:${Math.max(0.6, 100 * r.v / max)}%;background:${r.c}"></span></span><span class="v">${r.t}</span></div>`).join('');
+  }
+
+  function refreshStats() {
+    const P = D[mode];
+    $('n-leaves').textContent = fmt(P.n);
+    $('n-ratio').textContent = `leaves · ${Math.round(NX * NY * NZ / P.n)}× fewer than ${fmt(NX * NY * NZ)} voxels`;
+    bars($('hist'), P.hist.map((v, i) => ({ k: (1 << i) + ' m', v, c: LV[i], t: fmt(v) })), Math.max(...P.hist));
+    const st = [
+      { k: 'dense', v: D.dense_MB * 1000, t: D.dense_MB.toFixed(1) + ' MB', c: '#5a6472', note: 'uint8 grid in memory' },
+      { k: 'dense.z', v: D.dense_npz_kB, t: D.dense_npz_kB + ' kB', c: '#7d8796' },
+      { k: 'octree.z', v: P.npz_kB, t: P.npz_kB + ' kB', c: 'var(--accent)' },
+      { k: '2.5D map', v: D.heightmap_npz_kB, t: D.heightmap_npz_kB + ' kB', c: '#a6cf8a' }
+    ];
+    bars($('store'), st, Math.max(D.dense_npz_kB, D.plain.npz_kB, D.mesh.npz_kB));
+    $('m-desc').textContent = DESC[mode];
+  }
+
+  function setMode(m) {
+    mode = m;
+    $('m-plain').setAttribute('aria-pressed', m === 'plain');
+    $('m-mesh').setAttribute('aria-pressed', m === 'mesh');
+    if (inst) scene.remove(inst);
+    if (!trees[m].inst) trees[m].inst = buildInstances(trees[m]);
+    inst = trees[m].inst; scene.add(inst);
+    refreshSection(); refreshStats();
+  }
+
+  function resize() {
+    const r = canvas.parentElement.getBoundingClientRect();
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(canvas.parentElement);
+
+  $('t-tile').textContent = D.tile;
+  $('t-sub').textContent = `256 × 256 m at 1 m voxels, box height ${NZ} m, tallest building ${D.max_h} m. Building cells are coloured by size; the section shows the air cells.`;
+  $('note').innerHTML = `<b>What to look at.</b> Building walls are made of 1 m cubes (orange) over their full height, because footprints and roof heights rarely line up with powers of two. That is why the plain octree is only about as small as a zipped dense grid on this low-rise tile, while a 2.5D height map is ${Math.round(D.dense_npz_kB / D.heightmap_npz_kB)}× smaller still. The win shows up in the air: big cubes away from buildings, which is what a solver mesh wants.<br><br><span class="swatch" style="background:var(--l0)"></span>1 m <span class="swatch" style="background:var(--l1);margin-left:8px"></span>2 m <span class="swatch" style="background:var(--l2);margin-left:8px"></span>4 m <span class="swatch" style="background:var(--l3);margin-left:8px"></span>8 m <span class="swatch" style="background:var(--l4);margin-left:8px"></span>16 m <span class="swatch" style="background:var(--l5);margin-left:8px"></span>32 m`;
+
+  $('m-plain').onclick = () => setMode('plain');
+  $('m-mesh').onclick = () => setMode('mesh');
+  let pending = 0;
+  $('slice').oninput = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(refreshSection); };
+  $('cut').onchange = refreshSection; $('airgrid').onchange = refreshSection;
+
+  setTimeout(() => {
+    trees.plain = decode(D.plain); trees.mesh = decode(D.mesh);
+    $('loading').hidden = true;
+    resize(); setMode('plain');
+  }, 30);
+
+  (function loop() { controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+})();
+</script>

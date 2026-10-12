@@ -2,3 +2,5 @@
 __pycache__/
 *.vtk
 .pytest_cache/
+viewer/data_tile*.js
+viewer/tile*.html

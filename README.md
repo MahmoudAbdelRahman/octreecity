@@ -85,8 +85,8 @@ plus OpenStreetMap). Known gaps:
 
 - No DEM reader yet. The KAIST demo estimates terrain from building base heights.
 - The OpenFOAM export passes the package's own closedness and volume checks, but
-  has not been run through OpenFOAM `checkMesh` yet, and writing it is slow
-  (about 2 min for 1.7 M cells).
+  has not been run through OpenFOAM `checkMesh` yet. It takes about 24 s for
+  1.7 M cells (binary files).
 - Ray analyses: direct sun and sky visibility only (no reflections or diffuse
   light), trees opaque, grid north taken as true north.
 - The tiled builder takes buildings and land cover, not yet trees or terrain.

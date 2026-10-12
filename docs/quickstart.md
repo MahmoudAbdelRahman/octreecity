@@ -24,15 +24,11 @@ print(city.shape, city.crs)      # (800, 800, 171) EPSG:32652
 Buildings take their height from the OSM tags `height` or `building:levels`
 (3 m per level), otherwise 10 m. Terrain is flat.
 
-## 3. Look at it
+## 3. Look at it in 3D
 
 ```python
-import matplotlib.pyplot as plt
-from octreecity.render import render_top
-
-fig, ax = plt.subplots(figsize=(8, 8))
-render_top(city, ax)
-fig.savefig("gangnam.png")
+from octreecity.viz import show
+show(city)          # interactive in Jupyter; or show(city).write_html("city.html")
 ```
 
 ## 4. Sky view factor and sun hours at street level
@@ -58,6 +54,7 @@ x, names = tensors_2d(city, factor=2)    # [channels, 400, 400] for a U-Net
 
 ## Next
 
+- [3D views](visualize.md)
 - [Inputs](inputs.md): CityGML, GeoJSON, footprints, terrain, land cover, trees
 - [Analysis](analysis.md): sky view, shadows, sun hours
 - [Octrees and adaptation](octree.md): min/max cell size, `adapt()` on any field

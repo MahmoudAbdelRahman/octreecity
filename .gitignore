@@ -9,3 +9,9 @@ data/*.npz
 data/osm_*.json
 outputs/exports/
 data/
+notebooks/*.npz
+notebooks/*.obj
+notebooks/*.mtl
+.DS_Store
+.ipynb_checkpoints/
+outputs/viz/

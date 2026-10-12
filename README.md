@@ -38,7 +38,8 @@ follows the footprint outlines, not the volume.
 | `analysis` | sky view factor, shadows, sun position, sun hours; surface or exact rays (light passes under canopies) |
 | `exports` | OBJ meshes (merged faces, one material per label), 2D/3D tensors for ML |
 | `foam` | CFD plugin: OpenFOAM polyMesh of the fluid cells, with hanging-node faces |
-| `render` | shaded top views and sections |
+| `viz` | interactive 3D (plotly): `show(city)`, results on the street, adaptive cells on a cut |
+| `render` | shaded top views and sections (images) |
 
 ![Sky view factor and winter sun hours, downtown Osaka](outputs/report/osaka_1m_svf_sun.png)
 
@@ -57,7 +58,8 @@ pts, _ = street_points(city, every=2)
 svf = sky_view_factor(city, pts)
 ```
 
-Full docs: [quickstart](docs/quickstart.md), [inputs](docs/inputs.md),
+Notebook: [notebooks/octreecity_quickstart.ipynb](notebooks/octreecity_quickstart.ipynb) (3D views, step by step).
+Full docs: [quickstart](docs/quickstart.md), [3D views](docs/visualize.md), [inputs](docs/inputs.md),
 [analysis](docs/analysis.md), [octrees and adaptation](docs/octree.md),
 [exports](docs/exports.md), [whole cities](docs/tiles.md), [command line](docs/cli.md),
 [file formats](docs/formats.md).

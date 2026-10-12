@@ -62,3 +62,12 @@ def test_to_octree_pads_height():
     assert t.shape == (64, 64, 64)
     d = t.to_dense()
     assert (d[..., :45] == col.to_dense()).all() and (d[..., 45:] == 0).all()
+
+
+def test_crop_and_repr():
+    g, s, c, nz = random_city(5)
+    col = ColumnCity.from_heightfield(g, s, c, nz, voxel_size=2.0, origin=(100.0, 50.0, 0.0))
+    sub = col.crop(10, 20, 40, 30)
+    assert sub.shape[:2] == (20, 15) and sub.origin[:2] == (110.0, 70.0)
+    assert (sub.to_dense() == col.to_dense()[5:25, 10:25]).all()
+    assert "ColumnCity" in repr(col) and "building" in repr(col)

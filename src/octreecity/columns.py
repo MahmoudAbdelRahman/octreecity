@@ -99,6 +99,27 @@ class ColumnCity:
         return cls((nx, ny, nz), np.concatenate(offs), np.concatenate([p.top for p in parts]),
                    np.concatenate([p.label for p in parts]), voxel_size, tuple(origin))
 
+    def __repr__(self):
+        nx, ny, nz = self.shape
+        c = self.voxel_size
+        from .builder import LABELS
+        labs = [LABELS.get(int(v), str(v)) for v in np.unique(self.label) if v != 0]
+        return (f"ColumnCity {nx * c:g} x {ny * c:g} x {nz * c:g} m at {c:g} m cells "
+                f"({nx} x {ny} columns, {self.n_runs:,} runs, {self.nbytes / 1e6:.1f} MB in memory)\n"
+                f"  contains: {', '.join(labs)}\n"
+                f"  origin: ({self.origin[0]:.1f}, {self.origin[1]:.1f}, {self.origin[2]:.1f}) m"
+                + (f" in {self.crs}" if self.crs else ""))
+
+    def crop(self, x, y, width, depth):
+        """Sub-area in metres from the city's corner (x, y, width, depth)."""
+        c = self.voxel_size
+        i0, j0 = int(round(x / c)), int(round(y / c))
+        i1, j1 = min(self.shape[0], i0 + int(round(width / c))), min(self.shape[1], j0 + int(round(depth / c)))
+        sub = ColumnCity.from_dense(self.to_dense(i0, i1)[:, j0:j1], c,
+                                    (self.origin[0] + i0 * c, self.origin[1] + j0 * c, self.origin[2]))
+        sub.crs = self.crs
+        return sub
+
     # ---------------------------------------------------------------- queries
 
     @property

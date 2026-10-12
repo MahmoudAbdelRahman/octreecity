@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 viewer/data_tile*.js
 viewer/tile*.html
+outputs/*.mp4

@@ -1,72 +1,103 @@
 # OctreeCity
 
-A sparse, adaptive octree representation of labelled city voxels: a lighter,
-application-independent alternative to dense VoxCity-style grids. One
-structure for storage, queries, CFD / ML meshes and visualization.
+Voxel cities that stay small. OctreeCity stores a city as **columns of label
+runs** (ground up to 1 m, building up to 67 m, air above, tree canopy with air
+under it...). It builds **adaptive octrees** from them on demand, for any
+application: storage, ray analyses, machine learning, visualization, CFD.
 
-## Status (12 Oct 2026): proof of concept
+![All of Osaka at 1 m](outputs/report/osaka_1m_overview.png)
 
-`src/octreecity/octree.py`: linear (pointerless) octree.
-- Leaves are aligned cubes of side 2**level voxels with one uint8 label
-  (air 0, ground 1, building 2, tree 3 by default; any labels < 255 work).
-- Sorted by Morton code: point location is a binary search, and any aligned
-  cube is a contiguous slice.
-- On disk, each leaf is stored as just (level, label), 2 bytes. Codes are
-  rebuilt from the order.
-- Non-cubic boxes: nx, ny, nz must be multiples of the root size 2**max_level.
-- Builders: `from_dense(grid)` (bottom-up merge) and `from_heightfield(ground,
-  surface, class)` (top-down with min/max pyramids, no dense grid; the
-  result is identical, which the tests check).
-- Adaptivity: `split`, `refine_where(predicate)`, `limit_size_near(labels,
-  distance, max_level)` (small cells near surfaces), `balance(6|18|26)`
-  (2:1 rule for solvers).
-- `export.py`: legacy VTK hexahedra for ParaView, matplotlib slice plots.
+*All of Osaka: 556,724 buildings, 228 km² at 1 m, built in 26 s into one 37 MB file
+(a dense voxel grid would be 14.6 GB).*
 
-## First benchmark (20 Osaka tiles, 256 x 256 m, 1 m voxels)
+## Why
 
-`scripts/bench_osaka.py` reads `urban_wind/data/cities/osaka/height_pictures.npz`
-(read only). It uses 1 voxel of ground, buildings on top, and the tallest
-building + 16 m of air, rounded up to 32 m.
+Dense voxel grids (as in VoxCity) grow with volume: 1 m cells over a city is
+gigabytes, so people fall back to 5 m cells. City geometry is mostly vertical
+walls, flat roofs and layers, so OctreeCity stores runs along z. Size then
+follows the footprint outlines, not the volume.
 
-| | total over 20 tiles |
+| 20 Osaka tiles, 1 m | dense grid | octree | **columns** |
+|---|---|---|---|
+| zipped on disk | 662 kB | 575 kB | **228 kB** |
+| in memory | 113 MB | 55 MB | **20 MB** |
+| build per 256 m tile | | 17 ms | **1.2 ms** |
+
+## What it does
+
+| Module | |
 |---|---|
-| dense uint8 in memory | 113 MB |
-| octree in memory (10 B/leaf) | 55 MB (20x fewer elements) |
-| dense, npz compressed | 0.66 MB |
-| octree, npz compressed (level + label) | 0.58 MB |
-| height map, npz (2.5D lower bound) | 0.09 MB |
-| build from height map | 19 ms / tile |
-| locate 1M random points | 23 ms (dense indexing: 5 ms) |
-| meshing octree (air <= 2 m within 8 m of solid, 2:1) | ~430k cells / tile, 1.5 s |
+| `columns` | `ColumnCity`: the storage format (CSR runs per column), any number of layers per column, exact round trip to dense grids |
+| `sources` | readers: CityGML (LoD0-2, streamed), GeoJSON, OSM Overpass JSON, footprint lists |
+| `builder` | `CityBuilder`: terrain, land cover (water, grass, roads...), tree canopies over air, buildings on the terrain |
+| `tiles` | tiled store (one zip, random access per tile), `build_tiled` in parallel, `region()` stitching |
+| `octree` | `LinearOctree`: Morton-ordered leaves, point location, 2:1 balance, refinement near surfaces, 2 bytes per leaf on disk |
+| `city` | `build_city(heights, pixel_size, min_cell, max_cell)`: user-chosen min/max cell size in metres |
+| `adapt` | split-and-merge adaptation to **any field** (wind, sun hours, noise, ML output) with min/max size, buffer layers, cell budget, value transfer |
+| `analysis` | sky view factor, shadows, sun position, sun hours; surface or exact rays (light passes under canopies) |
+| `exports` | OBJ meshes (merged faces, one material per label), 2D/3D tensors for ML |
+| `foam` | CFD plugin: OpenFOAM polyMesh of the fluid cells, with hanging-node faces |
+| `render` | shaded top views and sections |
 
-What this says (honest reading):
-- The gain grows with empty space: 4x smaller than compressed dense for
-  the 328 m tower tile, about equal for low-rise tiles.
-- About 80% of leaves are 1 m cubes. Building walls at 1 m resolution,
-  with footprints and roof heights not aligned to powers of two, force the
-  finest level along every wall, over its full height. An octree pays
-  O(wall area); a 2.5D column format pays O(footprint perimeter).
-- Ground alignment matters: a 1-voxel ground slab (air starting at z = 1)
-  makes ~1.5-2x more leaves than no ground voxels or a 2-voxel slab
-  (tile 2311: 259k vs 133k vs 160k leaves).
+![Sky view factor and winter sun hours, downtown Osaka](outputs/report/osaka_1m_svf_sun.png)
 
-## Open design questions
+## Install and use
 
-1. Pure octree vs hybrid: quadtree in x, y with exact z spans per column
-   (much smaller for 2.5D cities, but less uniform for meshing), or
-   anisotropic leaves (tall cells) inside the octree.
-2. Should building interiors be one "solid, don't care" label that is
-   allowed to merge freely (most applications never look inside)?
-3. Alignment: snap footprints and heights to the grid, or allow
-   sub-voxel geometry in boundary leaves (cut cells)?
-4. Baselines to compare against: VoxCity itself, OpenVDB, sparse voxel
-   DAGs.
-
-## Run
-
-```
+```bash
 uv sync
-.venv/bin/python -m pytest -q
-.venv/bin/python scripts/bench_osaka.py 20
-.venv/bin/python scripts/plot_slice.py 868
+uv run pytest -q
 ```
+
+```python
+from octreecity.sources import read_citygml
+from octreecity.builder import CityBuilder
+from octreecity.analysis import street_points, sky_view_factor
+
+bld = read_citygml("buildings.gml.gz").clip(x0, y0, x0 + 1000, y0 + 1000)
+b = CityBuilder(x0, y0, 1000, 1000, cell=1.0)
+b.add_terrain(dem)             # raster or callable(x, y), metres
+b.add_buildings(bld)
+city = b.build()               # ColumnCity
+city.save("city.npz")
+
+pts, _ = street_points(city, every=2)
+svf = sky_view_factor(city, pts)
+tree = city.to_octree(5)       # adaptive cells, 1 m to 32 m
+```
+
+Command line:
+
+```bash
+octreecity tiles --wkb-pickle buildings.pkl.gz --cell 1 -o city.ocz
+octreecity info city.ocz
+octreecity svf city.ocz --region 40 46 44 50 -o svf.png
+octreecity sun city.npz --lat 34.69 --lon 135.5 --tz 9 --date 2026-12-21 -o sun.png
+octreecity obj city.npz -o city.obj
+octreecity foam city.npz --max-cell 16 --near 8 -o case/
+```
+
+All lengths are metres, in the projected CRS of the input data.
+
+## Status: alpha (0.1)
+
+Works and is tested (49 tests) on Osaka (PLATEAU) and Daejeon (V-World CityGML
+plus OpenStreetMap). Known gaps:
+
+- No DEM reader yet. The KAIST demo estimates terrain from building base heights.
+- The OpenFOAM export passes the package's own closedness and volume checks, but
+  has not been run through OpenFOAM `checkMesh` yet, and writing it is slow
+  (about 2 min for 1.7 M cells).
+- Ray analyses: direct sun and sky visibility only (no reflections or diffuse
+  light), trees opaque, grid north taken as true north.
+- The tiled builder takes buildings and land cover, not yet trees or terrain.
+- File formats may still change before 1.0.
+
+## Data credits
+
+Demo data, not included in the repository: PLATEAU (MLIT Japan) for Osaka,
+V-World (Korea) for Daejeon buildings, and © OpenStreetMap contributors (ODbL)
+for land cover, trees and roads in the KAIST images.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

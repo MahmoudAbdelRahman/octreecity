@@ -2,7 +2,8 @@
 name = "octreecity"
 version = "0.1.0"
 description = "Adaptive, application-independent voxel cities: compact column storage, octrees on demand, ray analyses, mesh and CFD export"
-authors = [{ name = "Mahmoud" }]
+authors = [{ name = "Mahmoud AbdelRahman" }]
+license = "MIT"
 keywords = ["urban", "voxel", "octree", "city", "cfd", "gis", "sky view factor", "solar"]
 classifiers = ["Programming Language :: Python :: 3", "Topic :: Scientific/Engineering :: GIS"]
 readme = "README.md"

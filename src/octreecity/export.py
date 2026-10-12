@@ -42,7 +42,10 @@ def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True):
     """Draw the leaves cut by the plane axis = index (voxel units)."""
     from matplotlib.collections import PolyCollection
 
-    colors = colors or {0: "#f4f6fb", 1: "#9c8b6e", 2: "#5b6b8c", 3: "#4f8f4a"}
+    if colors is None:
+        from .render import COLORS
+        colors = dict(COLORS)
+        colors.update({0: "#f4f6fb", 2: "#5b6b8c"})       # light air, darker buildings on a light plot
     k = "xyz".index(axis)
     if index is None:
         index = tree.shape[k] // 2

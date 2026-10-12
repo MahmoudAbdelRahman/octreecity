@@ -7,3 +7,4 @@ viewer/tile*.html
 outputs/*.mp4
 data/*.npz
 data/osm_*.json
+outputs/exports/

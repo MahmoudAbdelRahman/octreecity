@@ -109,17 +109,34 @@ show_values(city, street_map(city, where, sun, 4), "Sun hours, 21 Dec", colorsca
 md("""
 ## 7. What makes OctreeCity different: adaptive cells
 
-Most voxel tools use one cell size everywhere. OctreeCity can use small cells
+Most voxel tools use one cell size everywhere. OctreeCity uses small cells
 where detail matters (next to buildings and the ground) and big cells in open
-air. Here is a vertical cut through a 256 m block, with cells from 1 m to 16 m.
+air. Here is a 256 m block with cells from 1 m to 16 m.
 """)
 code("""
+from octreecity.viz import show_octree
+
 block = city.crop(372, 372, 256, 256)                       # x, y, width, depth in metres
 cells = block.to_octree(4)                                  # 1, 2, 4, 8, 16 m cubes
 cells.limit_size_near([1, 2, 3, 5, 6, 7], distance=6, max_level=0)
 cells.balance(26)
 print(f"{cells.n_leaves:,} cells instead of {block.shape[0] * block.shape[1] * cells.shape[2]:,} equal voxels")
-show_cells(cells)                          # the cut goes where the buildings are
+""")
+md("""
+**Cut-away view:** the block with one corner removed. The two walls show the
+cells, coloured by size: orange 1 m cells wrap the buildings and the ground,
+blue 16 m cells fill the open air.
+""")
+code("""
+show_octree(cells, style="cutaway")
+""")
+md("""
+**Shell view:** nested see-through envelopes. The inner shell holds all the
+1 m cells, the next one everything up to 2 m, and so on. Click legend entries
+to peel the shells away.
+""")
+code("""
+show_octree(cells, style="shells")
 """)
 
 md("""

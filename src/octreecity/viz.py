@@ -212,3 +212,120 @@ def show_cells(tree, y=None, title=None, height=650, max_cells=80_000):
                   title or f"Adaptive cells on a vertical cut at y = {yy:.0f} m", height)
     fig.update_layout(scene_camera=dict(eye=dict(x=0.0, y=-0.85, z=0.05)))
     return fig
+
+
+SIZE_COLORS = ["#f2a65a", "#e9cf6e", "#a6cf8a", "#5fb8a8", "#4f8fc4", "#6b6fc9", "#9b6bc9"]
+
+
+def _level_grid(tree):
+    """Dense grid of leaf levels (cell size class) and labels."""
+    lev = np.empty(tree.shape, np.uint8)
+    X, Y, Z = tree.corners()
+    for L in np.unique(tree.level):
+        s = 1 << int(L)
+        m = tree.level == L
+        view = lev.reshape(tree.shape[0] // s, s, tree.shape[1] // s, s, tree.shape[2] // s, s)
+        view[X[m] // s, :, Y[m] // s, :, Z[m] // s, :] = L
+    return lev, tree.to_dense()
+
+
+def show_octree(tree, style="shells", title=None, height=700, cut=None):
+    """3D view of an adaptive octree.
+
+    style="shells": nested see-through envelopes; shell k holds every air
+        cell up to 2**k cells wide, so you see where the mesh is fine in 3D.
+        Click legend entries to peel shells away.
+    style="cutaway": the octree as a block with one corner removed; the two
+        cut faces show the cells (coloured by size), buildings stand in the
+        rest. cut=(x, y) in metres sets the corner (default: block centre).
+    """
+    import plotly.graph_objects as go
+
+    from .exports import surface_quads
+
+    c = tree.voxel_size
+    lev, lab = _level_grid(tree)
+    solid = lab != AIR
+    levels = [int(v) for v in np.unique(lev[~solid])]
+    traces = []
+    if style == "shells":
+        shell_colors = ["#ff8a3d", "#ffd23f", "#5fd3a8", "#4f9cf0", "#a77bf0"]
+        shell_opac = [0.65, 0.32, 0.18, 0.1, 0.07]
+        for k, L in enumerate(levels[:-1]):
+            region = solid | (lev <= L)
+            cols = ColumnCity.from_dense(region.astype(np.uint8), c, (0.0, 0.0, tree.origin[2]))
+            q, _ = surface_quads(cols, labels=[1])
+            if len(q) == 0:
+                continue
+            v, inv = np.unique(np.round(q.reshape(-1, 3), 3), axis=0, return_inverse=True)
+            quad = inv.reshape(-1, 4).astype(np.int32)
+            traces.append(go.Mesh3d(x=v[:, 0].astype(np.float32), y=v[:, 1].astype(np.float32),
+                                    z=v[:, 2].astype(np.float32),
+                                    i=np.concatenate([quad[:, 0], quad[:, 0]]),
+                                    j=np.concatenate([quad[:, 1], quad[:, 2]]),
+                                    k=np.concatenate([quad[:, 2], quad[:, 3]]),
+                                    color=shell_colors[k % 5], opacity=shell_opac[k % 5],
+                                    name=f"cells up to {(1 << L) * c:g} m", flatshading=True,
+                                    showlegend=True, hoverinfo="name",
+                                    lighting=dict(ambient=0.6, diffuse=0.6, specular=0.05)))
+        cols = ColumnCity.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
+        traces = _meshes(cols, [BUILDING, TREE]) + traces
+        default_title = "Where the cells are fine: nested shells by cell size"
+    else:
+        nx, ny, nz = tree.shape
+        cx, cy = (nx // 2, ny // 2) if cut is None else (int(cut[0] / c), int(cut[1] / c))
+        X, Y, Z = tree.corners()
+        S = tree.sizes()
+        gap = 0.08 * c
+
+        def face(mask, plane, at):
+            """Squares of the cells crossing the plane x=at or y=at, kept part only."""
+            u = (Y if plane == "x" else X)[mask]
+            z = Z[mask]
+            s = S[mask]
+            L = tree.label[mask]
+            lv = tree.level[mask]
+            out = []
+            for key in np.unique(np.where(L == AIR, lv.astype(int), 100 + L.astype(int))):
+                m = np.where(L == AIR, lv.astype(int), 100 + L.astype(int)) == key
+                g = gap if key < 100 else 0.0          # gaps show air cell edges; solids stay solid
+                ua, za, sa = u[m] * c + g, z[m] * c + g + tree.origin[2], s[m] * c - 2 * g
+                n = int(m.sum())
+                a = np.stack([ua, ua + sa, ua + sa, ua], 1).ravel().astype(np.float32)
+                b = np.stack([za, za, za + sa, za + sa], 1).ravel().astype(np.float32)
+                fixed = np.full(4 * n, at * c - 0.15 * c, np.float32)   # just in front of the cut walls
+                xs, ys = (fixed, a) if plane == "x" else (a, fixed)
+                base = (4 * np.arange(n)).astype(np.int32)
+                if key >= 100:
+                    name, color = STYLE.get(key - 100, (f"label {key - 100}", "#cc4444"))
+                else:
+                    name, color = f"{(1 << key) * c:g} m cells", SIZE_COLORS[key % len(SIZE_COLORS)]
+                out.append(go.Mesh3d(x=xs, y=ys, z=b, i=np.concatenate([base, base]),
+                                     j=np.concatenate([base + 1, base + 2]), k=np.concatenate([base + 2, base + 3]),
+                                     color=color, name=name, legendgroup=name, hoverinfo="name",
+                                     flatshading=True, lighting=dict(ambient=1.0, diffuse=0.0)))
+            return out
+
+        # the removed corner is x < cx, y < cy; its two walls are the cut faces:
+        # plane x = cx for y < cy, and plane y = cy for x < cx
+        m1 = (X <= cx) & (cx < X + S) & (Y < cy)
+        m2 = (Y <= cy) & (cy < Y + S) & (X < cx)
+        f1 = face(m1, "x", cx)
+        f2 = face(m2, "y", cy)
+        # buildings outside the removed corner
+        keep = lab.copy()
+        keep[:cx, :cy] = AIR
+        cols = ColumnCity.from_dense(keep, c, (0.0, 0.0, tree.origin[2]))
+        traces = _meshes(cols, [BUILDING, TREE]) + f1 + f2
+        seen = set()
+        for t in traces:
+            t.legendgroup = t.name
+            t.showlegend = t.name not in seen
+            seen.add(t.name)
+        default_title = "Octree cut-away: cells on two cut faces, coloured by size"
+    fig = go.Figure(traces)
+    fig = _layout(fig, ColumnCity(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
+                                  np.zeros(0, np.uint8), c, tree.origin), title or default_title, height)
+    if style != "shells":
+        fig.update_layout(scene_camera=dict(eye=dict(x=-1.1, y=-1.1, z=0.7)))
+    return fig

@@ -27,3 +27,16 @@ def test_show_and_values_and_cells():
 def test_downsample_keeps_buildings():
     d = downsample(city(), 2)
     assert d.shape == (32, 32, 16) and (d.label == BUILDING).any()
+
+
+def test_show_octree_styles():
+    from octreecity.viz import show_octree
+
+    t = city().to_octree(3)
+    t.limit_size_near([BUILDING], 3, 0)
+    t.balance(26)
+    shells = show_octree(t, style="shells")
+    assert any("cells up to" in (tr.name or "") for tr in shells.data)
+    cut = show_octree(t, style="cutaway")
+    names = [tr.name for tr in cut.data if tr.showlegend]
+    assert len(names) == len(set(names)) and any("m cells" in n for n in names)

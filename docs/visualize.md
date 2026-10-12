@@ -4,7 +4,7 @@ Interactive 3D in Jupyter or VS Code (plotly): drag to rotate, scroll to zoom,
 click a legend entry to hide it.
 
 ```python
-from octreecity.viz import show, show_values, show_cells, street_map
+from octreecity.viz import show, show_values, show_cells, show_octree, street_map
 
 show(city)                                       # the city in 3D
 show(city, labels=[2, 3])                        # only buildings and trees
@@ -14,7 +14,10 @@ svf = sky_view_factor(city, pts)
 show_values(city, street_map(city, where, svf, 4), "Sky view factor",
             colorscale="Cividis", cmin=0, cmax=1)  # results painted on the street
 
-show_cells(city.crop(0, 0, 256, 256).to_octree(4))   # adaptive cells on a vertical cut
+tree = city.crop(0, 0, 256, 256).to_octree(4)
+show_octree(tree, style="cutaway")              # block with a corner removed, cells by size
+show_octree(tree, style="shells")               # nested envelopes of 1 m, 2 m, 4 m ... cells
+show_cells(tree)                                # a single vertical cut
 ```
 
 Big areas are simplified for display only (`step`, chosen automatically to

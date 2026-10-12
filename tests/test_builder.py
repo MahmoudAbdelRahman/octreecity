@@ -50,3 +50,23 @@ def test_read_citygml(tmp_path):
     feats = read_citygml(p)
     assert len(feats) == 1 and feats.height[0] == 12.5 and feats.base[0] == 50
     assert abs(feats.geoms[0].area - 80) < 1e-6
+
+
+def test_city_from_osm_offline():
+    from octreecity.easy import city_from_osm, utm_epsg
+
+    lat, lon = 36.37, 127.36
+    d = 0.0009  # ~100 m
+    sq = lambda la, lo, s: [{"lat": la + a, "lon": lo + b} for a, b in ((0, 0), (0, s), (s, s), (s, 0), (0, 0))]
+    data = {"elements": [
+        {"type": "way", "tags": {"building": "yes", "building:levels": "5"}, "geometry": sq(lat - d / 4, lon - d / 4, d / 4)},
+        {"type": "way", "tags": {"leisure": "park"}, "geometry": sq(lat + d / 8, lon + d / 8, d / 3)},
+        {"type": "way", "tags": {"highway": "residential"},
+         "geometry": [{"lat": lat - d / 2, "lon": lon - d}, {"lat": lat - d / 2, "lon": lon + d}]},
+        {"type": "node", "tags": {"natural": "tree"}, "lat": lat + d / 2, "lon": lon - d / 2},
+    ]}
+    city = city_from_osm(lat, lon, size_m=200, cell=1.0, osm_json=data)
+    assert utm_epsg(lat, lon) == 32652 and city.crs == "EPSG:32652"
+    labels = set(np.unique(city.label).tolist())
+    assert {BUILDING, GRASS, ROAD, TREE} <= labels
+    assert city.top_of([BUILDING]).max() * city.voxel_size + city.origin[2] >= 14.0

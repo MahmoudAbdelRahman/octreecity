@@ -41,3 +41,20 @@ def test_roundtrip_and_region(tmp_path):
         assert (sub[..., cd.shape[2]:] == 0).all()
     assert (big[16:, 32:] == 0).all()
     assert r.offsets[-1] == r.n_runs
+
+
+def test_build_tiled(tmp_path):
+    import shapely
+
+    from octreecity.sources import Features
+    from octreecity.tiles import build_tiled
+
+    geoms = [shapely.box(10 + 40 * k, 10, 30 + 40 * k, 30) for k in range(5)]
+    feats = Features(geoms, height=[5.0, 10, 15, 20, 25])
+    parks = Features([shapely.box(0, 40, 200, 60)])
+    n = build_tiled(tmp_path / "c.ocz", feats, cell=1.0, tile=64, workers=2, landcover=[(parks, 5)])
+    t = TiledCity(tmp_path / "c.ocz")
+    assert n == len(t.tiles) >= 3
+    r = t.region(0, 0, 4, 1)
+    assert 5 in set(np.unique(r.label).tolist()) and 2 in set(np.unique(r.label).tolist())
+    assert r.top_of([2]).max() == 26           # 25 m building + 1 m ground

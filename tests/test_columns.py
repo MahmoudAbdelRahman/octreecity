@@ -52,3 +52,13 @@ def test_save_load(tmp_path):
     col.save(tmp_path / "c.npz")
     d = ColumnCity.load(tmp_path / "c.npz")
     assert (d.to_dense() == col.to_dense()).all() and d.voxel_size == 0.5
+
+
+def test_to_octree_pads_height():
+    g, s, c, nz = random_city(4, n=64, nz=45)
+    col = ColumnCity.from_heightfield(g, s, c, 45)
+    t = col.to_octree(5)
+    t.check()
+    assert t.shape == (64, 64, 64)
+    d = t.to_dense()
+    assert (d[..., :45] == col.to_dense()).all() and (d[..., 45:] == 0).all()

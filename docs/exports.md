@@ -1,0 +1,44 @@
+# Exports
+
+## 3D meshes (OBJ)
+
+```python
+from octreecity.exports import write_obj
+write_obj(city, "city.obj", labels=[2])     # buildings only; omit labels for all
+```
+
+Faces between labels, merged into strips (walls along z, roofs along y), one
+group and material per label, outward normals. Opens in Blender, Rhino,
+MeshLab, three.js. 512 x 512 m of downtown Osaka: 28,000 faces, 4 MB.
+
+## Tensors for machine learning
+
+```python
+from octreecity.exports import tensors_2d, tensors_3d
+x, names = tensors_2d(city, factor=2)       # [C, nx/2, ny/2]: height, ground, per-label cover and top
+v = tensors_3d(city, labels=[2, 3], factor=4)   # [2, nx/4, ny/4, nz/4] label fractions
+```
+
+## OpenFOAM mesh (CFD plugin)
+
+```python
+from octreecity.foam import build_polymesh, check_polymesh, write_polymesh
+
+tree = city.to_octree(4)
+tree.limit_size_near([1, 2], distance=6, max_level=0)
+tree.balance(26)
+mesh = build_polymesh(tree)          # fluid = air cells
+print(check_polymesh(mesh))          # every cell closed, volumes positive
+write_polymesh(mesh, "case/")        # case/constant/polyMesh, binary
+```
+
+Walls: one patch per solid label (ground, building, tree...). Box sides:
+`xmin xmax ymin ymax zmin zmax`. Where a big cell meets four small ones its
+face is split and hanging points are listed, as in snappyHexMesh meshes.
+Status: passes the package's own checks; not yet verified with OpenFOAM
+`checkMesh`.
+
+## Viewing octrees
+
+`export.write_vtk(tree, "tree.vtk")` writes hexahedra for ParaView;
+`export.plot_slice(tree, ax, axis="y")` draws a section.

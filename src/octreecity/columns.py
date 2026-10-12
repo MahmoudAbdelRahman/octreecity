@@ -29,6 +29,7 @@ class ColumnCity:
     label: np.ndarray
     voxel_size: float = 1.0
     origin: tuple = (0.0, 0.0, 0.0)
+    crs: str = None
 
     # ------------------------------------------------------------------ build
 
@@ -139,20 +140,31 @@ class ColumnCity:
         return np.repeat(self.label[k0:k1], lengths).reshape(x1 - x0, ny, nz)
 
     def to_octree(self, max_level, strip=None):
-        """Octree of the same voxels, built strip by strip (no full dense grid)."""
+        """Octree of the same voxels, built strip by strip (no full dense grid).
+
+        The top is filled up with air to a multiple of the largest cell
+        (2**max_level voxels); x and y must already be multiples of it.
+        """
         S = 1 << max_level
+        if self.shape[0] % S or self.shape[1] % S:
+            raise ValueError(f"x and y sizes {self.shape[:2]} must be multiples of 2**max_level = {S}; "
+                             "choose a smaller max_level or a city size that divides evenly")
+        nz = -(-self.shape[2] // S) * S
         strip = S if strip is None else strip
         if strip % S:
             raise ValueError("strip must be a multiple of 2**max_level")
         codes, levels, labels = [], [], []
         for x0 in range(0, self.shape[0], strip):
             x1 = min(self.shape[0], x0 + strip)
-            t = LinearOctree.from_dense(self.to_dense(x0, x1), max_level)
+            d = self.to_dense(x0, x1)
+            if nz != d.shape[2]:
+                d = np.concatenate([d, np.full(d.shape[:2] + (nz - d.shape[2],), AIR, np.uint8)], 2)
+            t = LinearOctree.from_dense(d, max_level)
             x, y, z = t.corners()
             codes.append(morton.encode(x + x0, y, z))
             levels.append(t.level)
             labels.append(t.label)
-        return LinearOctree(self.shape, max_level, np.concatenate(codes),
+        return LinearOctree((*self.shape[:2], nz), max_level, np.concatenate(codes),
                             np.concatenate(levels), np.concatenate(labels),
                             self.voxel_size, self.origin)
 
@@ -161,12 +173,13 @@ class ColumnCity:
     def save(self, path):
         np.savez_compressed(path, shape=np.array(self.shape), counts=np.diff(self.offsets).astype(np.uint16),
                             top=self.top, label=self.label, voxel_size=self.voxel_size,
-                            origin=np.array(self.origin))
+                            origin=np.array(self.origin), crs=str(self.crs or ""))
 
     @classmethod
     def load(cls, path):
         d = np.load(path)
         offsets = np.zeros(d["counts"].size + 1, np.int64)
         np.cumsum(d["counts"], out=offsets[1:])
+        crs = str(d["crs"]) if "crs" in d.files and str(d["crs"]) else None
         return cls(tuple(int(v) for v in d["shape"]), offsets, d["top"], d["label"],
-                   float(d["voxel_size"]), tuple(float(v) for v in d["origin"]))
+                   float(d["voxel_size"]), tuple(float(v) for v in d["origin"]), crs)

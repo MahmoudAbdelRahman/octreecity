@@ -28,6 +28,7 @@ follows the footprint outlines, not the volume.
 | Module | |
 |---|---|
 | `columns` | `ColumnCity`: the storage format (CSR runs per column), any number of layers per column, exact round trip to dense grids |
+| `easy` | `city_from_osm(lat, lon, size_m)`: one call, any place, data downloaded from OpenStreetMap |
 | `sources` | readers: CityGML (LoD0-2, streamed), GeoJSON, OSM Overpass JSON, footprint lists |
 | `builder` | `CityBuilder`: terrain, land cover (water, grass, roads...), tree canopies over air, buildings on the terrain |
 | `tiles` | tiled store (one zip, random access per tile), `build_tiled` in parallel, `region()` stitching |
@@ -41,12 +42,29 @@ follows the footprint outlines, not the volume.
 
 ![Sky view factor and winter sun hours, downtown Osaka](outputs/report/osaka_1m_svf_sun.png)
 
-## Install and use
+## Start in one minute
 
 ```bash
-uv sync
-uv run pytest -q
+git clone https://github.com/MahmoudAbdelRahman/octreecity && cd octreecity && uv sync
 ```
+
+```python
+from octreecity.easy import city_from_osm
+from octreecity.analysis import street_points, sky_view_factor
+
+city = city_from_osm(37.4979, 127.0276, size_m=800)   # any place: OSM buildings, land cover, trees, roads
+pts, _ = street_points(city, every=2)
+svf = sky_view_factor(city, pts)
+```
+
+Full docs: [quickstart](docs/quickstart.md), [inputs](docs/inputs.md),
+[analysis](docs/analysis.md), [octrees and adaptation](docs/octree.md),
+[exports](docs/exports.md), [whole cities](docs/tiles.md), [command line](docs/cli.md),
+[file formats](docs/formats.md).
+
+![Gangnam from one call](outputs/report/gangnam_osm.png)
+
+## Use with your own data
 
 ```python
 from octreecity.sources import read_citygml
@@ -80,7 +98,7 @@ All lengths are metres, in the projected CRS of the input data.
 
 ## Status: alpha (0.1)
 
-Works and is tested (49 tests) on Osaka (PLATEAU) and Daejeon (V-World CityGML
+Works and is tested (52 tests) on Osaka (PLATEAU) and Daejeon (V-World CityGML
 plus OpenStreetMap). Known gaps:
 
 - No DEM reader yet. The KAIST demo estimates terrain from building base heights.

@@ -10,7 +10,12 @@ from .octree import AIR, BUILDING, GROUND, LinearOctree, pad_to_multiple
 def build_city(height, pixel_size, min_cell, max_cell, ground=None,
                surface_label=BUILDING, air_above=16.0, ground_thickness=None,
                air_label=AIR, ground_label=GROUND):
-    """Build a city octree from 2.5D rasters.
+    """Build a city octree from 2.5D rasters. All lengths are in metres.
+
+    Example: build_city(h, pixel_size=1.0, min_cell=1, max_cell=32) for a
+    1 m raster, 1 m finest cells and 32 m largest cells. The returned
+    octree counts in whole cells of min_cell metres (tree.voxel_size), with
+    tree.origin the metre position of its corner.
 
     height: object height above ground per pixel (m), 0 where there is none.
     pixel_size: raster resolution (m).

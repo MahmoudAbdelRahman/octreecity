@@ -1,7 +1,10 @@
 [project]
 name = "octreecity"
 version = "0.1.0"
-description = "Add your description here"
+description = "Adaptive, application-independent voxel cities: compact column storage, octrees on demand, ray analyses, mesh and CFD export"
+authors = [{ name = "Mahmoud" }]
+keywords = ["urban", "voxel", "octree", "city", "cfd", "gis", "sky view factor", "solar"]
+classifiers = ["Programming Language :: Python :: 3", "Topic :: Scientific/Engineering :: GIS"]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,6 +16,9 @@ dependencies = [
     "scipy>=1.18.1",
     "shapely>=2.2.0",
 ]
+
+[project.scripts]
+octreecity = "octreecity.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]

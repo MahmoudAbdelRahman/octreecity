@@ -130,3 +130,67 @@ def _column_slice(t, x, n, nz):
     counts = counts.copy()
     counts[need] += 1
     return counts, top, lab
+
+
+def _build_one(args):
+    from .builder import CityBuilder
+    from .sources import Features
+    import shapely
+
+    i, j, x0, y0, tile, cell, air_above, bld, layers = args
+    b = CityBuilder(x0, y0, tile, tile, cell)
+    for wkbs, label, line_width in layers:
+        if wkbs:
+            b.add_landcover(Features(shapely.from_wkb(wkbs)), label, line_width=line_width)
+    tops = [0.0]
+    if bld[0]:
+        wkbs, h, base = bld
+        b.add_buildings(Features(shapely.from_wkb(wkbs), height=h, base=base))
+        tops.append(max(h))
+    nz = int(np.ceil((max(tops) + cell + air_above) / cell))
+    return i, j, b.build(nz=nz)
+
+
+def build_tiled(path, buildings, cell=1.0, tile=256.0, bbox=None, landcover=(), workers=8,
+                air_above=20.0, crs=None, progress=None):
+    """Build a whole city into a tiled store, in parallel.
+
+    buildings: Features with heights (flat terrain). landcover: list of
+    (Features, label) or (Features, label, line_width). bbox: (x0, y0, x1,
+    y1), default the buildings' extent snapped to the tile grid. Tiles with
+    no building are skipped. Returns the number of tiles written.
+    """
+    from concurrent.futures import ProcessPoolExecutor
+    import shapely
+
+    if bbox is None:
+        bx0, by0, bx1, by1 = buildings.bounds()
+        bx0, by0 = np.floor(bx0 / tile) * tile, np.floor(by0 / tile) * tile
+    else:
+        bx0, by0, bx1, by1 = bbox
+    ni, nj = int(np.ceil((bx1 - bx0) / tile)), int(np.ceil((by1 - by0) / tile))
+    btree = shapely.STRtree(buildings.geoms)
+    lc = [(f, lab, (rest[0] if rest else None), shapely.STRtree(f.geoms)) for f, lab, *rest in landcover]
+    wkb_b = shapely.to_wkb(buildings.geoms)
+    h = np.where(np.isfinite(buildings.height), buildings.height, 10.0)
+    jobs = []
+    for i in range(ni):
+        for j in range(nj):
+            x0, y0 = bx0 + i * tile, by0 + j * tile
+            box = shapely.box(x0, y0, x0 + tile, y0 + tile)
+            idx = btree.query(box)
+            if idx.size == 0:
+                continue
+            layers = []
+            for f, lab, lw, tr in lc:
+                k = tr.query(box)
+                layers.append((list(shapely.to_wkb(f.geoms[k])), lab, None if lw is None else np.asarray(lw)[k] if np.ndim(lw) else lw))
+            jobs.append((i, j, x0, y0, tile, cell, air_above,
+                         (list(wkb_b[idx]), h[idx].tolist(), buildings.base[idx].tolist()), layers))
+    with TiledCityWriter(path, bx0, by0, -cell, tile, cell, crs=crs) as w:
+        with ProcessPoolExecutor(workers) as ex:
+            for n, (i, j, city) in enumerate(ex.map(_build_one, jobs, chunksize=4)):
+                w.add(i, j, city)
+                if progress:
+                    progress(n + 1, len(jobs))
+    return len(jobs)

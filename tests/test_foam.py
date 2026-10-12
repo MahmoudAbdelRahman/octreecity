@@ -43,4 +43,6 @@ def test_polymesh_after_adapt(tmp_path):
     r = check_polymesh(m)
     assert r["max_open"] < 1e-9 and r["min_volume"] > 0
     d = write_polymesh(m, tmp_path / "case")
+    write_polymesh(m, tmp_path / "ascii", binary=False)
+    assert (tmp_path / "ascii/constant/polyMesh/faces").read_text().count("(") > len(m["faces"])
     assert (d / "faces").exists() and (d / "boundary").read_text().count("startFace") == len(m["patches"])

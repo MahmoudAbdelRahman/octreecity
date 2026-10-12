@@ -229,22 +229,35 @@ class LinearOctree:
         by most finite-volume and finite-element solvers on octree meshes.
         """
         dirs = _directions(connectivity)
+        # first pass probes from every small leaf; afterwards a violation can
+        # only involve a leaf created by the last split, so probe from those
+        cand = np.nonzero(self.level.astype(int) <= self.max_level - 2)[0]
         for _ in range(64):
-            x, y, z = self.corners()
-            s = self.sizes()
+            x, y, z = (v[cand] for v in self.corners())
+            s = np.left_shift(1, self.level[cand].astype(np.int64))
+            lv = self.level[cand].astype(int)
             too_big = np.zeros(self.n_leaves, bool)
+            prober = np.zeros(cand.size, bool)
             for dx, dy, dz in dirs:
-                px = np.where(dx > 0, x + s, np.where(dx < 0, x - 1, x))
-                py = np.where(dy > 0, y + s, np.where(dy < 0, y - 1, y))
-                pz = np.where(dz > 0, z + s, np.where(dz < 0, z - 1, z))
+                px = x + s if dx > 0 else x - 1 if dx < 0 else x
+                py = y + s if dy > 0 else y - 1 if dy < 0 else y
+                pz = z + s if dz > 0 else z - 1 if dz < 0 else z
                 inside = ((px >= 0) & (py >= 0) & (pz >= 0) & (px < self.shape[0])
                           & (py < self.shape[1]) & (pz < self.shape[2]))
                 nb = self.locate(px[inside], py[inside], pz[inside])
-                bad = self.level[nb].astype(int) > self.level[inside].astype(int) + 1
+                bad = self.level[nb].astype(int) > lv[inside] + 1
                 too_big[nb[bad]] = True
+                prober[np.nonzero(inside)[0][bad]] = True
             if not too_big.any():
                 return self
+            # leaves that found a violation probe again (the neighbour may
+            # still be too big after one split), plus every new leaf
+            keep = cand[prober]
+            keep_key = self.code[keep] * np.uint64(32) + self.level[keep]
+            old = self.code[~too_big] * np.uint64(32) + self.level[~too_big]
             self.split(too_big)
+            key = self.code * np.uint64(32) + self.level
+            cand = np.nonzero(~np.isin(key, old, assume_unique=True) | np.isin(key, keep_key))[0]
         raise RuntimeError("balance did not converge")
 
     def limit_size_near(self, labels, distance, max_level):

@@ -130,16 +130,12 @@ def build_polymesh(tree, fluid=(AIR,), label_names=None):
     has_mid = integer_mid & np.isin(mk, allk)
 
     pts_keys = np.unique(np.concatenate([allk, mk[has_mid]]))
-    face_lists = []
     cidx = np.searchsorted(pts_keys, ck)
     midx = np.searchsorted(pts_keys, mk)
-    for f in range(len(ck)):
-        lst = []
-        for k in range(4):
-            lst.append(cidx[f, k])
-            if has_mid[f, k]:
-                lst.append(midx[f, k])
-        face_lists.append(np.array(lst, np.int64))
+    # interleave corner k and (optional) midpoint of edge k -> up to 8 points per face
+    pad = np.full((len(ck), 8), -1, np.int64)
+    pad[:, 0::2] = cidx
+    pad[:, 1::2] = np.where(has_mid, midx, -1)
 
     # decode point keys to coordinates (metres)
     kz = pts_keys % nz1
@@ -168,63 +164,98 @@ def build_polymesh(tree, fluid=(AIR,), label_names=None):
         patches.append((name, start, len(idx)))
         start += len(idx)
     order = np.concatenate(order)
-    return dict(points=points, faces=[face_lists[k] for k in order], owner=own2[order],
+    return dict(points=points, faces=pad[order], owner=own2[order],
                 neighbour=nbr2[order][: len(order_int)], patches=patches, n_cells=int(isf.sum()))
+
+
+def _face_geometry(m):
+    """Area vectors and centres of all faces (padded face arrays)."""
+    F = m["faces"]
+    P = m["points"]
+    valid = F >= 0
+    n = valid.sum(1)
+    p = P[np.where(valid, F, 0)]
+    c = (p * valid[..., None]).sum(1) / n[:, None]
+    # next valid point of each slot (wrap around), padded slots contribute 0
+    order = np.argsort(~valid, axis=1, kind="stable")
+    q = np.take_along_axis(p, order[..., None], 1)
+    k = np.arange(F.shape[1])[None]
+    nxt = np.take_along_axis(q, np.where(k + 1 < n[:, None], k + 1, 0)[..., None], 1)
+    tri = 0.5 * np.cross(q - c[:, None], nxt - c[:, None])
+    tri *= (k < n[:, None])[..., None]
+    return tri.sum(1), c
 
 
 def check_polymesh(m):
     """Closedness and volume checks (no OpenFOAM needed). Returns a dict."""
-    P = m["points"]
     n = m["n_cells"]
-    area = np.zeros((n, 3))
-    vol = np.zeros(n)
-    nint = len(m["neighbour"])
-    for f, (fl, o) in enumerate(zip(m["faces"], m["owner"])):
-        p = P[fl]
-        c = p.mean(0)
-        a = 0.5 * np.cross(p - c, np.roll(p, -1, 0) - c).sum(0)
-        area[o] += a
-        vol[o] += a @ c / 3
-        if f < nint:
-            nb = m["neighbour"][f]
-            area[nb] -= a
-            vol[nb] -= a @ c / 3
+    a, c = _face_geometry(m)
+    own, nb = m["owner"], m["neighbour"]
+    nint = len(nb)
+    av = np.einsum("ij,ij->i", a, c) / 3
+    acc = lambda w: (np.bincount(own, w, minlength=n)
+                     - np.bincount(nb, w[:nint], minlength=n))
+    area = np.stack([acc(a[:, k]) for k in range(3)], 1)
+    vol = acc(av)
     scale = np.abs(vol) ** (2 / 3) + 1e-12
-    return dict(cells=n, faces=len(m["faces"]), points=len(P),
+    return dict(cells=n, faces=len(m["faces"]), points=len(m["points"]),
                 max_open=float((np.linalg.norm(area, axis=1) / scale).max()),
                 min_volume=float(vol.min()), total_volume=float(vol.sum()))
 
 
-def write_polymesh(m, case_dir):
-    """Write constant/polyMesh/{points,faces,owner,neighbour,boundary} (ASCII)."""
+def write_polymesh(m, case_dir, binary=True):
+    """Write constant/polyMesh/{points,faces,owner,neighbour,boundary}.
+
+    binary=True writes OpenFOAM binary lists (32-bit labels, 64-bit scalars,
+    faces as faceCompactList): fast and about half the size of ASCII.
+    """
     d = Path(case_dir) / "constant" / "polyMesh"
     d.mkdir(parents=True, exist_ok=True)
+    fmt = "binary" if binary else "ascii"
+    F = m["faces"]
+    valid = F >= 0
+    flat = F[valid].astype(np.int32)
+    offsets = np.concatenate([[0], np.cumsum(valid.sum(1))]).astype(np.int32)
 
-    def header(cls, obj, note=""):
-        return ("FoamFile\n{\n    version     2.0;\n    format      ascii;\n"
-                f"    class       {cls};\n    location    \"constant/polyMesh\";\n"
-                f"    object      {obj};\n{note}}}\n\n")
+    def header(cls, obj, note="", arch=True):
+        a = '    arch        "LSB;label=32;scalar=64";\n' if binary and arch else ""
+        return ("FoamFile\n{\n    version     2.0;\n"
+                f"    format      {fmt};\n{a}    class       {cls};\n"
+                f"    location    \"constant/polyMesh\";\n    object      {obj};\n{note}}}\n\n")
 
-    with open(d / "points", "w") as f:
-        f.write(header("vectorField", "points"))
-        f.write(f"{len(m['points'])}\n(\n")
-        np.savetxt(f, m["points"], fmt="(%.6g %.6g %.6g)")
-        f.write(")\n")
-    with open(d / "faces", "w") as f:
-        f.write(header("faceList", "faces"))
-        f.write(f"{len(m['faces'])}\n(\n")
-        f.write("\n".join(f"{len(fl)}(" + " ".join(map(str, fl)) + ")" for fl in m["faces"]))
-        f.write("\n)\n")
+    def write_list(f, arr, ascii_fmt):
+        f.write(f"{len(arr)}\n(".encode())
+        if binary:
+            f.write(np.ascontiguousarray(arr).tobytes())
+            f.write(b")\n")
+        else:
+            f.write(b"\n")
+            np.savetxt(f, arr, fmt=ascii_fmt)
+            f.write(b")\n")
+
     note = (f"    note        \"nPoints:{len(m['points'])} nCells:{m['n_cells']} "
-            f"nFaces:{len(m['faces'])} nInternalFaces:{len(m['neighbour'])}\";\n")
+            f"nFaces:{len(F)} nInternalFaces:{len(m['neighbour'])}\";\n")
+    with open(d / "points", "wb") as f:
+        f.write(header("vectorField", "points").encode())
+        write_list(f, m["points"].astype("<f8"), "(%.6g %.6g %.6g)")
+    with open(d / "faces", "wb") as f:
+        if binary:
+            f.write(header("faceCompactList", "faces").encode())
+            write_list(f, offsets.astype("<i4"), "%d")
+            f.write(b"\n")
+            write_list(f, flat.astype("<i4"), "%d")
+        else:
+            f.write(header("faceList", "faces").encode())
+            f.write(f"{len(F)}\n(\n".encode())
+            f.write("\n".join(f"{v.size}(" + " ".join(map(str, v)) + ")"
+                              for v in np.split(flat, offsets[1:-1])).encode())
+            f.write(b"\n)\n")
     for name, arr in (("owner", m["owner"]), ("neighbour", m["neighbour"])):
-        with open(d / name, "w") as f:
-            f.write(header("labelList", name, note))
-            f.write(f"{len(arr)}\n(\n")
-            f.write("\n".join(map(str, arr.tolist())))
-            f.write("\n)\n")
+        with open(d / name, "wb") as f:
+            f.write(header("labelList", name, note).encode())
+            write_list(f, np.asarray(arr).astype("<i4"), "%d")
     with open(d / "boundary", "w") as f:
-        f.write(header("polyBoundaryMesh", "boundary"))
+        f.write(header("polyBoundaryMesh", "boundary", arch=False).replace(f"format      {fmt}", "format      ascii"))
         f.write(f"{len(m['patches'])}\n(\n")
         for name, start, n in m["patches"]:
             kind = "patch" if name in _SIDE_NAMES.values() else "wall"

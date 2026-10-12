@@ -48,7 +48,7 @@ ax.set_xlabel("km east", color=MUTED, fontsize=9, labelpad=2)
 cb = fig.add_axes([0.06, 0.03, 0.4, 0.014])
 fig.colorbar(im, cax=cb, orientation="horizontal")
 cb.tick_params(colors=MUTED, labelsize=8)
-cb.set_xlabel("building height (m), capped at 80", color=MUTED, fontsize=8.5)
+fig.text(0.47, 0.05, "building height (m), capped at 80", color=MUTED, fontsize=8.5, ha="right")
 
 if len(sys.argv) > 4:
     zi, zj, zn = map(int, sys.argv[2:5])

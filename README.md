@@ -5,7 +5,7 @@ runs** (ground up to 1 m, building up to 67 m, air above, tree canopy with air
 under it...). It builds **adaptive octrees** from them on demand, for any
 application: storage, ray analyses, machine learning, visualization, CFD.
 
-![All of Osaka at 1 m](outputs/report/osaka_1m_overview.png)
+![All of Osaka at 1 m](https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/osaka_1m_overview.png)
 
 *All of Osaka: 556,724 buildings, 228 km² at 1 m, built in 26 s into one 37 MB file
 (a dense voxel grid would be 14.6 GB).*
@@ -41,13 +41,19 @@ follows the footprint outlines, not the volume.
 | `viz` | interactive 3D (plotly): `show(city)`, results on the street, adaptive cells on a cut |
 | `render` | shaded top views and sections (images) |
 
-![Sky view factor and winter sun hours, downtown Osaka](outputs/report/osaka_1m_svf_sun.png)
+![Sky view factor and winter sun hours, downtown Osaka](https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/osaka_1m_svf_sun.png)
 
-## Start in one minute
+## Install
 
 ```bash
-git clone https://github.com/MahmoudAbdelRahman/octreecity && cd octreecity && uv sync
+pip install octreecity              # core: storage, builders, analysis, exports
+pip install "octreecity[viz]"       # + interactive 3D views and images
+pip install "octreecity[notebook]"  # + JupyterLab, to run the tutorial notebook
 ```
+
+From source: `git clone https://github.com/MahmoudAbdelRahman/octreecity && cd octreecity && uv sync`.
+
+## Start in one minute
 
 ```python
 from octreecity.easy import city_from_osm
@@ -58,13 +64,13 @@ pts, _ = street_points(city, every=2)
 svf = sky_view_factor(city, pts)
 ```
 
-Notebook: [notebooks/octreecity_quickstart.ipynb](notebooks/octreecity_quickstart.ipynb) (3D views, step by step).
-Full docs: [quickstart](docs/quickstart.md), [3D views](docs/visualize.md), [inputs](docs/inputs.md),
-[analysis](docs/analysis.md), [octrees and adaptation](docs/octree.md),
-[exports](docs/exports.md), [whole cities](docs/tiles.md), [command line](docs/cli.md),
-[file formats](docs/formats.md).
+Notebook: [notebooks/octreecity_quickstart.ipynb](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/notebooks/octreecity_quickstart.ipynb) (3D views, step by step).
+Full docs: [quickstart](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/quickstart.md), [3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/visualize.md), [inputs](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/inputs.md),
+[analysis](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/analysis.md), [octrees and adaptation](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/octree.md),
+[exports](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/exports.md), [whole cities](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/tiles.md), [command line](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/cli.md),
+[file formats](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/formats.md).
 
-![Gangnam from one call](outputs/report/gangnam_osm.png)
+![Gangnam from one call](https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/gangnam_osm.png)
 
 ## Run the notebook (and demo it without surprises)
 
@@ -126,7 +132,7 @@ All lengths are metres, in the projected CRS of the input data.
 
 ## Status: alpha (0.1)
 
-Works and is tested (56 tests) on Osaka (PLATEAU) and Daejeon (V-World CityGML
+Works and is tested (56 tests, Python 3.10 to 3.13) on Osaka (PLATEAU) and Daejeon (V-World CityGML
 plus OpenStreetMap). Known gaps:
 
 - No DEM reader yet. The KAIST demo estimates terrain from building base heights.
@@ -146,4 +152,4 @@ for land cover, trees and roads in the KAIST images.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/LICENSE).

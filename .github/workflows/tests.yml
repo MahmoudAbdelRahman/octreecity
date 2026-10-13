@@ -3,8 +3,12 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
-      - run: uv run pytest -q
+      - run: uv venv --python ${{ matrix.python }}
+      - run: uv pip install -e ".[viz]" pytest
+      - run: uv run --no-sync pytest -q

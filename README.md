@@ -110,6 +110,32 @@ octreecity sun city.npz --lat 34.69 --lon 135.5 --tz 9 --date 2026-12-21 -o sun.
 octreecity obj city.npz -o city.obj
 ```
 
+## Why octrees instead of fixed-size voxels
+
+A fixed voxel grid uses one cell size everywhere. To get 1 m detail at a wall,
+you also pay for 1 m cells in the empty air a hundred metres above the roofs
+and deep inside every building, which is most of a city's volume. The number
+of cells grows with the volume, so city-wide models are often forced to use
+coarse cells, and fine detail is lost where it matters most.
+
+An octree starts from large cubes and splits a cube into eight smaller ones
+only where it contains something worth resolving: a wall, the ground, a
+change in the field you care about. Cells end up 1 m next to surfaces and up
+to 32 m in open air, with exactly the same detail where geometry is.
+
+![The same vertical slice with fixed 1 m voxels and with octree cells](outputs/report/fixed_vs_octree.png)
+
+On this 256 m tile of downtown Osaka, 16.8 million fixed 1 m voxels become
+391,000 octree cells (43 times fewer), with every wall and roof still at 1 m.
+Fewer cells mean less memory, faster analysis and smaller simulation meshes,
+and they make 1 m detail practical at city scale.
+
+The trade-offs: cells of different sizes need more bookkeeping than a plain
+array (finding a neighbour is a search rather than an index lookup), and
+some methods expect equal cells. That is why OctreeCity stores cities as
+columns and builds octrees only when an application wants adaptive cells, and
+why it converts to and from regular voxel grids exactly.
+
 ## How it works
 
 A city is mostly vertical walls, flat roofs and layers. OctreeCity uses two

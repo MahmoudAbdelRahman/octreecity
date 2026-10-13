@@ -1,13 +1,24 @@
 # Analysis: sky view, shadows, sun hours
 
+The examples on this page start from a city, for example:
+
 ```python
+from octreecity.easy import city_from_osm
+city = city_from_osm(36.3700, 127.3625, size_m=1000)   # KAIST, Daejeon; any lat, lon works
+```
+
+```python
+from datetime import date, datetime, timedelta, timezone
 from octreecity.analysis import street_points, sky_view_factor, shadow, sun_position, sun_hours
 
+lat, lon, tz_hours = 36.3700, 127.3625, 9                 # the place and its time zone (UTC+9)
 pts, (i, j) = street_points(city, every=2, height=1.5)   # open-air points above the ground
 svf = sky_view_factor(city, pts, n_az=36, max_dist=300)
-az, alt = sun_position(lat, lon, datetime_with_timezone)
+
+noon = datetime(2026, 12, 21, 12, 0, tzinfo=timezone(timedelta(hours=tz_hours)))
+az, alt = sun_position(lat, lon, noon)                    # sun direction at that moment
 dark = shadow(city, pts, az, alt)                         # True = in shadow
-hours = sun_hours(city, pts, lat, lon, day, tz_hours, step_min=20)
+hours = sun_hours(city, pts, lat, lon, date(2026, 12, 21), tz_hours, step_min=20)
 ```
 
 **How it works.** Rays march over the columns from each point. The sky view

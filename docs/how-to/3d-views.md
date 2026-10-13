@@ -1,10 +1,18 @@
 # 3D views
 
+The examples on this page start from a city, for example:
+
+```python
+from octreecity.easy import city_from_osm
+city = city_from_osm(36.3700, 127.3625, size_m=1000)   # KAIST, Daejeon; any lat, lon works
+```
+
 Interactive 3D in Jupyter or VS Code (plotly): drag to rotate, scroll to zoom,
 click a legend entry to hide it.
 
 ```python
 from octreecity.viz import show, show_values, show_cells, show_octree, street_map
+from octreecity.analysis import street_points, sky_view_factor
 
 show(city)                                       # the city in 3D
 show(city, labels=[2, 3])                        # only buildings and trees

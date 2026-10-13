@@ -94,6 +94,8 @@ Run it with `./demo.sh` (see [running the notebook](https://github.com/MahmoudAb
 from octreecity.sources import read_citygml
 from octreecity.builder import CityBuilder
 
+x0, y0 = 232031.0, 418662.0                 # south-west corner, in the data's coordinates (metres)
+dem = lambda x, y: 0 * x                    # terrain: a raster or a function of (x, y); flat here
 buildings = read_citygml("buildings.gml.gz").clip(x0, y0, x0 + 1000, y0 + 1000)
 b = CityBuilder(x0, y0, width=1000, depth=1000, cell=1.0)   # metres, projected CRS
 b.add_terrain(dem)                                           # raster or function of (x, y)
@@ -147,10 +149,22 @@ Both views are interactive in a notebook, and a wireframe of the buildings
 themselves is one option away:
 
 ```python
+from octreecity.easy import city_from_osm
 from octreecity.viz import show, show_octree
-show_octree(cells, style="cutaway")         # or style="wire", or style="shells"
-show(city.crop(0, 0, 160, 160), wireframe=True)
+
+city = city_from_osm(36.3700, 127.3625, size_m=1000)   # KAIST, Daejeon
+block = city.crop(372, 372, 256, 256)                  # a 256 m block: x, y, width, depth in metres
+cells = block.to_octree(4)                             # octree with 1, 2, 4, 8 and 16 m cells
+cells.limit_size_near([1, 2, 3, 5, 6, 7], distance=6, max_level=0)   # keep 1 m cells near surfaces
+cells.balance(26)
+
+show_octree(cells, style="cutaway")                    # or style="shells"
+show(city.crop(300, 300, 160, 160), wireframe=True)    # the buildings as a wireframe
 ```
+
+For `style="wire"`, use a smaller block so every cube stays readable, for
+example `downsample(city.crop(320, 320, 128, 128), 2).to_octree(3)` (see
+[3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/3d-views.md)).
 
 The trade-offs: cells of different sizes need more bookkeeping than a plain
 array (finding a neighbour is a search rather than an index lookup), and

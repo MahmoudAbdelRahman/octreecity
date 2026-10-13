@@ -1,5 +1,12 @@
 # Exports
 
+The examples on this page start from a city, for example:
+
+```python
+from octreecity.easy import city_from_osm
+city = city_from_osm(36.3700, 127.3625, size_m=1000)   # KAIST, Daejeon; any lat, lon works
+```
+
 ## 3D meshes (OBJ)
 
 ```python
@@ -24,7 +31,7 @@ v = tensors_3d(city, labels=[2, 3], factor=4)   # [2, nx/4, ny/4, nz/4] label fr
 ```python
 from octreecity.foam import build_polymesh, check_polymesh, write_polymesh
 
-tree = city.to_octree(4)
+tree = city.crop(372, 372, 256, 256).to_octree(4)   # a 256 m block; sides must divide by the largest cell (16 m)
 tree.limit_size_near([1, 2], distance=6, max_level=0)
 tree.balance(26)
 mesh = build_polymesh(tree)          # fluid = air cells

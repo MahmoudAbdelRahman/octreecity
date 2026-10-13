@@ -22,6 +22,11 @@ changes CRS.
 
 ## CityBuilder
 
+Replace the names in the example with your own data: `buildings`, `parks`,
+`rivers`, `roads` and `woods` are `Features` (from the readers above), `dem`
+is a terrain raster or a function of (x, y), and `x0, y0` is the south-west
+corner of the area in the data's coordinate system.
+
 ```python
 from octreecity.builder import CityBuilder, GRASS, WATER, ROAD
 
@@ -32,7 +37,7 @@ b.add_landcover(rivers, WATER, line_width=6)
 b.add_landcover(roads, ROAD, line_width=widths)   # lines are buffered
 b.add_trees(woods, top=14, base=4)          # canopy from 4 to 14 m, air below
 b.add_buildings(buildings)                  # stand on the lowest terrain under them
-b.add_solid(base_abs, top_abs, label)       # any other layer (bridges, roofs...)
+b.add_solid(base_abs, top_abs, label)       # any other layer: bottom and top rasters (m) and a label
 city = b.build(air_above=20)
 ```
 

@@ -3,6 +3,9 @@
 A city too large for memory is stored as square tiles in one zip file
 (`.ocz`). Any tile can be read alone.
 
+`buildings`, `parks` and `roads` below are `Features`, for example from
+`read_citygml` or `read_geojson` (see [your own data](own-data.md)).
+
 ```python
 from octreecity.tiles import build_tiled, TiledCity
 
@@ -12,7 +15,7 @@ build_tiled("osaka.ocz", buildings, cell=1.0, tile=256, workers=8,
 city = TiledCity("osaka.ocz")
 one = city.tile(40, 46)                    # a ColumnCity
 block = city.region(39, 45, 45, 51)        # 6 x 6 tiles stitched, missing tiles = air
-i, j = city.index_of(x, y)                 # which tile holds a point
+i, j = city.index_of(x, y)                 # which tile holds the point (x, y), in metres
 ```
 
 All of Osaka (556,724 buildings, 228 km² at 1 m) builds in 26 s on 8 cores

@@ -12,8 +12,8 @@
 | `octreecity.adapt` | `adapt`, `sample`, `transfer`, `face_pairs`, `jump_indicator` |
 | `octreecity.analysis` | `street_points`, `sky_view_factor`, `shadow`, `sun_position`, `sun_hours` |
 | `octreecity.viz` | `show`, `show_values`, `show_octree`, `show_cells`, `setup_notebook` |
-| `octreecity.render` | `render_top`, `render_section` (images) |
-| `octreecity.exports` | `write_obj`, `surface_quads`, `tensors_2d`, `tensors_3d` |
+| `octreecity.render` | `render_top`, `render_section`, `plot_slice` (images) |
+| `octreecity.exports` | `write_obj`, `surface_quads`, `tensors_2d`, `tensors_3d`, `write_vtk` |
 | `octreecity.foam` | `build_polymesh`, `check_polymesh`, `write_polymesh` (OpenFOAM) |
 | `octreecity.cli` | the `octreecity` command |
 

@@ -47,5 +47,5 @@ Status: passes the package's own checks; not yet verified with OpenFOAM
 
 ## Viewing octrees
 
-`export.write_vtk(tree, "tree.vtk")` writes hexahedra for ParaView;
-`export.plot_slice(tree, ax, axis="y")` draws a section.
+`exports.write_vtk(tree, "tree.vtk")` writes hexahedra for ParaView;
+`render.plot_slice(tree, ax, axis="y")` draws a section.

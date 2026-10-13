@@ -1,4 +1,4 @@
-"""Exports: surface meshes (OBJ) and tensors for machine learning.
+"""Exports: surface meshes (OBJ), octree cells (VTK) and tensors for machine learning.
 
 Meshes: the boundary between labels, as quads merged into strips (walls
 along z, roofs and ground along y), one OBJ group and material per label.
@@ -149,3 +149,38 @@ def tensors_3d(city, labels, factor=2):
         for k, lab in enumerate(labels):
             out[k, xs // f:xe // f] = (b == lab).mean(axis=(1, 3, 5))
     return out
+
+
+def write_vtk(tree, path, labels=None):
+    """Write leaves as VTK_HEXAHEDRON cells with 'label' and 'level' data.
+
+    labels: optional list of labels to keep (e.g. only buildings, or only
+    air to inspect the adaptive mesh). Points are not shared between cells.
+    """
+    keep = np.ones(tree.n_leaves, bool) if labels is None else np.isin(tree.label, labels)
+    x, y, z = (a[keep].astype(np.float64) for a in tree.corners())
+    s = tree.sizes()[keep].astype(np.float64)
+    h = tree.voxel_size
+    ox, oy, oz = tree.origin
+    corner = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
+                       [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], np.float64)
+    pts = np.empty((x.size, 8, 3), np.float64)
+    pts[..., 0] = ox + h * (x[:, None] + corner[:, 0] * s[:, None])
+    pts[..., 1] = oy + h * (y[:, None] + corner[:, 1] * s[:, None])
+    pts[..., 2] = oz + h * (z[:, None] + corner[:, 2] * s[:, None])
+    n = x.size
+    cells = np.hstack([np.full((n, 1), 8), np.arange(8 * n).reshape(n, 8)]).astype(">i4")
+    with open(path, "wb") as f:
+        f.write(b"# vtk DataFile Version 3.0\noctreecity leaves\nBINARY\n"
+                b"DATASET UNSTRUCTURED_GRID\n")
+        f.write(f"POINTS {8 * n} float\n".encode())
+        f.write(pts.reshape(-1, 3).astype(">f4").tobytes())
+        f.write(f"\nCELLS {n} {9 * n}\n".encode())
+        f.write(cells.tobytes())
+        f.write(f"\nCELL_TYPES {n}\n".encode())
+        f.write(np.full(n, 12, ">i4").tobytes())
+        f.write(f"\nCELL_DATA {n}\nSCALARS label int 1\nLOOKUP_TABLE default\n".encode())
+        f.write(tree.label[keep].astype(">i4").tobytes())
+        f.write(b"\nSCALARS level int 1\nLOOKUP_TABLE default\n")
+        f.write(tree.level[keep].astype(">i4").tobytes())
+        f.write(b"\n")

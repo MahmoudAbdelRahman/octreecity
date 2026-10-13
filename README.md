@@ -11,7 +11,7 @@ model to store it, run simulations on it, analyse it, train models on it and
 show it.
 
 <p align="center">
-  <img src="outputs/gifs/orbit.gif" width="70%" alt="A block of downtown Osaka built from PLATEAU data at 1 m">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/gifs/orbit.gif" width="70%" alt="A block of downtown Osaka built from PLATEAU data at 1 m">
 </p>
 
 ## What it is for
@@ -29,7 +29,7 @@ with the smallest and largest cell sizes set by you. Values move between
 refined meshes, and an optional plugin writes OpenFOAM meshes for CFD.
 
 <p align="center">
-  <img src="outputs/gifs/adapt.gif" width="80%" alt="Cells split where the wind field changes and merge where it is calm">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/gifs/adapt.gif" width="80%" alt="Cells split where the wind field changes and merge where it is calm">
 </p>
 
 **Environmental analysis in 3D.** Sky view factor, shadows and hours of direct
@@ -37,7 +37,7 @@ sun for any place and date: at street level, on roofs, or at any point in the
 air. Light can pass through the space under tree canopies and bridges.
 
 <p align="center">
-  <img src="outputs/gifs/sun_day.gif" width="70%" alt="Shadows moving across downtown Osaka on 21 December while the hours of sun add up">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/gifs/sun_day.gif" width="70%" alt="Shadows moving across downtown Osaka on 21 December while the hours of sun add up">
 </p>
 <p align="center"><em>Downtown Osaka on the shortest day: the glow shows where the sun is at that moment, and the heatmap adds up the hours of direct sun.</em></p>
 
@@ -54,7 +54,7 @@ line, or from your own data: CityGML (PLATEAU, V-World and others), GeoJSON,
 building footprints, terrain rasters, land cover and trees.
 
 <p align="center">
-  <img src="outputs/report/adapt_sun_section.png" width="100%" alt="3D shadow volumes: cells refine along shadow edges in the air above Osaka">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/adapt_sun_section.png" width="100%" alt="3D shadow volumes: cells refine along shadow edges in the air above Osaka">
 </p>
 <p align="center"><em>Adaptive cells following a 3D field: hours of winter sun in the air above downtown Osaka. Cells refine along the edges of shadow volumes and stay large in uniform sun or shade.</em></p>
 
@@ -85,8 +85,8 @@ show_values(city, street_map(city, where, svf, 4), "Sky view factor", colorscale
 ```
 
 The tutorial notebook goes through it step by step, with a 3D view after each
-step: [notebooks/octreecity_quickstart.ipynb](notebooks/octreecity_quickstart.ipynb).
-Run it with `./demo.sh` (see [running the notebook](docs/how-to/run-the-notebook.md)).
+step: [notebooks/octreecity_quickstart.ipynb](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/notebooks/octreecity_quickstart.ipynb).
+Run it with `./demo.sh` (see [running the notebook](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/run-the-notebook.md)).
 
 ## Using your own data
 
@@ -125,7 +125,7 @@ change in the field you care about. Cells end up 1 m next to surfaces and up
 to 32 m in open air, with exactly the same detail where geometry is.
 
 <p align="center">
-  <img src="outputs/report/fixed_vs_octree.png" width="100%" alt="The same vertical slice with fixed 1 m voxels and with octree cells">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/fixed_vs_octree.png" width="100%" alt="The same vertical slice with fixed 1 m voxels and with octree cells">
 </p>
 
 On this 256 m tile of downtown Osaka, 16.8 million fixed 1 m voxels become
@@ -136,8 +136,8 @@ and they make 1 m detail practical at city scale.
 ### See the cells in 3D
 
 <p align="center">
-  <img src="outputs/report/octree_cutaway.png" width="49%" alt="Octree cut-away: a 256 m block with one corner removed, cells coloured by size">
-  <img src="outputs/report/octree_wire.png" width="49%" alt="Octree cells drawn as wire cubes around buildings">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/octree_cutaway.png" width="49%" alt="Octree cut-away: a 256 m block with one corner removed, cells coloured by size">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/octree_wire.png" width="49%" alt="Octree cells drawn as wire cubes around buildings">
 </p>
 <p align="center"><em>Left: a 256 m block of Gangnam, Seoul, with one corner cut away; the two cut faces
 show 1 m cells wrapping the ground and buildings, growing to 16 m in open air. Right: every air
@@ -184,14 +184,14 @@ agree, repeat.*
 
 ## Documentation
 
-The [documentation](docs/index.md) is organised by what you want to do:
+The [documentation](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/index.md) is organised by what you want to do:
 
-- **Tutorials:** [quickstart](docs/tutorials/quickstart.md) and the [notebook](notebooks/octreecity_quickstart.ipynb)
-- **How-to guides:** [your own data](docs/how-to/own-data.md), [3D views](docs/how-to/3d-views.md),
-  [sky view and sun](docs/how-to/sky-and-sun.md), [whole cities](docs/how-to/whole-cities.md),
-  [export](docs/how-to/export.md), [running the notebook](docs/how-to/run-the-notebook.md)
-- **Explanation:** [how it works](docs/explanation/how-it-works.md), [adaptive cells](docs/explanation/adaptive-cells.md)
-- **Reference:** [modules](docs/reference/api.md), [command line](docs/reference/cli.md), [file formats](docs/reference/file-formats.md)
+- **Tutorials:** [quickstart](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/tutorials/quickstart.md) and the [notebook](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/notebooks/octreecity_quickstart.ipynb)
+- **How-to guides:** [your own data](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/own-data.md), [3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/3d-views.md),
+  [sky view and sun](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/sky-and-sun.md), [whole cities](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/whole-cities.md),
+  [export](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/export.md), [running the notebook](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/run-the-notebook.md)
+- **Explanation:** [how it works](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/explanation/how-it-works.md), [adaptive cells](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/explanation/adaptive-cells.md)
+- **Reference:** [modules](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/reference/api.md), [command line](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/reference/cli.md), [file formats](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/reference/file-formats.md)
 
 ## Related work
 
@@ -235,4 +235,4 @@ trees and roads. The data itself is not included in the repository.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/LICENSE).

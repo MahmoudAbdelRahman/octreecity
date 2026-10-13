@@ -242,7 +242,9 @@ change before 1.0. Known gaps:
   or terrain.
 
 Questions, ideas and issues are welcome on
-[GitHub](https://github.com/MahmoudAbdelRahman/octreecity/issues).
+[GitHub](https://github.com/MahmoudAbdelRahman/octreecity/issues); see
+[CONTRIBUTING.md](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/CONTRIBUTING.md)
+for how to propose changes.
 
 ## Data credits
 

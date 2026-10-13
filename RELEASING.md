@@ -1,6 +1,10 @@
 # Releasing to PyPI
 
-1. Bump `version` in `pyproject.toml` (for example 0.1.0 -> 0.1.1).
+Release only from an up-to-date `main`, after the changes are merged:
+`git switch main && git pull`.
+
+1. Bump `version` in `pyproject.toml` (for example 0.1.0 -> 0.1.1), through a
+   small pull request like any other change.
 2. Build and check:
 
    ```bash

@@ -22,6 +22,8 @@ PLOTLY = "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@4.1.1/plotly.min.js"
 
 nb = nbformat.read(SRC, 4)
 nb.cells.insert(2, nbformat.v4.new_code_cell("import octreecity.viz as _v; _v.DISPLAY_COLUMNS = 70_000"))
+import os
+os.environ["OCTREECITY_LIGHT_NOTEBOOK"] = "1"
 NotebookClient(nb, timeout=900, kernel_name="python3",
                resources={"metadata": {"path": str(SRC.parent)}}).execute()
 del nb.cells[2]
@@ -82,8 +84,8 @@ for cell in nb.cells:
             body.append(markdown(cell.source))
         continue
     src = cell.source.strip()
-    if src.startswith("import plotly.io"):
-        continue
+    if "setup_notebook()" in src and src.count("\n") < 5:
+        src = src.replace("\n\nsetup_notebook()          # 3D views work in JupyterLab, VS Code, Colab and classic Jupyter", "")
     body.append(f'<details class="code"><summary>Show code</summary><pre>{html.escape(src)}</pre></details>')
     for o in cell.outputs:
         if o.output_type == "stream":

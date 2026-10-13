@@ -331,3 +331,22 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None):
     if style != "shells":
         fig.update_layout(scene_camera=dict(eye=dict(x=-1.1, y=-1.1, z=0.7)))
     return fig
+
+
+def setup_notebook(fallback=None):
+    """Make 3D views show up in any notebook front end. Call once at the top.
+
+    Every view is sent in two forms: plotly's own format (JupyterLab with the
+    plotly plugin, VS Code, Colab draw it directly, offline) and a web-page
+    fallback that loads plotly.js from the internet for any other front end.
+    fallback=False sends only the first form (smaller saved notebooks).
+    The environment variable OCTREECITY_LIGHT_NOTEBOOK=1 also turns it off.
+    """
+    import os
+
+    import plotly.io as pio
+
+    if fallback is None:
+        fallback = os.environ.get("OCTREECITY_LIGHT_NOTEBOOK") != "1"
+    pio.renderers.default = "plotly_mimetype+notebook_connected" if fallback else "plotly_mimetype"
+    return pio.renderers.default

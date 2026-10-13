@@ -66,6 +66,32 @@ Full docs: [quickstart](docs/quickstart.md), [3D views](docs/visualize.md), [inp
 
 ![Gangnam from one call](outputs/report/gangnam_osm.png)
 
+## Run the notebook (and demo it without surprises)
+
+```bash
+cd octreecity
+./demo.sh
+```
+
+`demo.sh` installs everything and opens the quickstart notebook in the
+project's own JupyterLab. That JupyterLab includes the plotly plugin, so the 3D
+views draw offline, without a "trust" step. In VS Code, open the notebook and
+choose the project's `.venv` kernel.
+
+To avoid blank 3D views:
+
+- Start Jupyter from the project (`./demo.sh` or `uv run jupyter lab`), not
+  with `uv run --with jupyterlab ...`. That starts JupyterLab from a separate
+  environment without the plotly plugin.
+- The notebook's first cell calls `setup_notebook()`. It also sends each view as
+  a web page, so other front ends (classic Jupyter, nbviewer) still show it when
+  online.
+- Before a talk, run all cells once (Kernel > Restart and Run All, about 40 s).
+  The OSM download is then cached in `data/`, and the demo works with no
+  internet.
+- Backup: a web-page version of the notebook can be built with
+  `uv run python scripts/notebook_report.py` (writes `outputs/report/quickstart_page.html`).
+
 ## Use with your own data
 
 ```python
@@ -100,7 +126,7 @@ All lengths are metres, in the projected CRS of the input data.
 
 ## Status: alpha (0.1)
 
-Works and is tested (52 tests) on Osaka (PLATEAU) and Daejeon (V-World CityGML
+Works and is tested (56 tests) on Osaka (PLATEAU) and Daejeon (V-World CityGML
 plus OpenStreetMap). Known gaps:
 
 - No DEM reader yet. The KAIST demo estimates terrain from building base heights.

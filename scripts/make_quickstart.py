@@ -23,11 +23,10 @@ Every 3D view below is interactive: **drag to rotate, scroll to zoom,
 right-drag to move, click a legend entry to hide it.**
 """)
 code("""
-import plotly.io as pio
-pio.renderers.default = "plotly_mimetype"   # interactive 3D in JupyterLab and VS Code
-
 from octreecity.easy import city_from_osm
-from octreecity.viz import show, show_values, show_cells, street_map
+from octreecity.viz import setup_notebook, show, show_values, show_cells, street_map
+
+setup_notebook()          # 3D views work in JupyterLab, VS Code, Colab and classic Jupyter
 """)
 
 md("""
@@ -167,7 +166,11 @@ nb.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3 (octre
 out = ROOT / "notebooks" / "octreecity_quickstart.ipynb"
 out.parent.mkdir(exist_ok=True)
 if "--execute" in sys.argv:
+    import os
+
     from nbclient import NotebookClient
+
+    os.environ["OCTREECITY_LIGHT_NOTEBOOK"] = "1"     # keep the saved file small; live runs get the fallback
 
     NotebookClient(nb, timeout=900, kernel_name="python3",
                    resources={"metadata": {"path": str(out.parent)}}).execute()

@@ -28,4 +28,4 @@ radiation. Trees are opaque. For projected grids not aligned with north, pass
 `grid_rotation` to `sun_hours`.
 
 **Edges.** Points near the edge of a city see no obstacles beyond it. Load a
-margin around the area of interest (see [tiles](tiles.md)) and crop.
+margin around the area of interest (see [whole cities](whole-cities.md)) and crop.

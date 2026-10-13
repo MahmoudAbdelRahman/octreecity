@@ -54,11 +54,10 @@ x, names = tensors_2d(city, factor=2)    # [channels, 400, 400] for a U-Net
 
 ## Next
 
-- [3D views](visualize.md)
-- [Inputs](inputs.md): CityGML, GeoJSON, footprints, terrain, land cover, trees
-- [Analysis](analysis.md): sky view, shadows, sun hours
-- [Octrees and adaptation](octree.md): min/max cell size, `adapt()` on any field
-- [Exports](exports.md): OBJ, ML tensors, OpenFOAM
-- [Whole cities](tiles.md): tiled files, parallel builds
-- [Command line](cli.md)
-- [File formats](formats.md)
+- [Use your own data](../how-to/own-data.md): CityGML, GeoJSON, footprints, terrain, land cover, trees
+- [3D views](../how-to/3d-views.md)
+- [Sky view, shadows and sun hours](../how-to/sky-and-sun.md)
+- [Whole cities](../how-to/whole-cities.md): tiled files, parallel builds
+- [Export](../how-to/export.md): OBJ, ML arrays, OpenFOAM
+- [How OctreeCity works](../explanation/how-it-works.md)
+- [Command line](../reference/cli.md) and [file formats](../reference/file-formats.md)

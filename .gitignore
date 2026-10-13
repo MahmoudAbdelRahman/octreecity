@@ -16,3 +16,5 @@ notebooks/*.mtl
 .ipynb_checkpoints/
 outputs/viz/
 dist/
+outputs/gifs/_frames/
+site/

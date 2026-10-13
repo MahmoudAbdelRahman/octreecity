@@ -1,155 +1,168 @@
 # OctreeCity
 
-Voxel cities that stay small. OctreeCity stores a city as **columns of label
-runs** (ground up to 1 m, building up to 67 m, air above, tree canopy with air
-under it...). It builds **adaptive octrees** from them on demand, for any
-application: storage, ray analyses, machine learning, visualization, CFD.
+OctreeCity turns city data into a light 3D model that you can explore,
+analyse and reuse for many kinds of urban questions: how much sky people see
+from the street, where the winter sun reaches, how buildings shape the space
+around them, and what an adaptive grid for simulation or machine learning
+should look like.
 
-![All of Osaka at 1 m](https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/osaka_1m_overview.png)
+![A block of downtown Osaka built from PLATEAU data at 1 m](outputs/gifs/orbit.gif)
 
-*All of Osaka: 556,724 buildings, 228 km² at 1 m, built in 26 s into one 37 MB file
-(a dense voxel grid would be 14.6 GB).*
+## What you can do with it
 
-## Why
+- **Build a 3D city for any place** from OpenStreetMap in one line, or from
+  your own data (CityGML from PLATEAU or V-World, GeoJSON, building footprints),
+  with terrain, land cover, trees and buildings.
+- **Look around it** in interactive 3D views in Jupyter or VS Code.
+- **Ask street-level questions:** sky view factor, shadows and hours of direct
+  sun, for any date and place.
+- **Use adaptive cells:** small cells where detail matters (near walls, the
+  ground, shadow edges or any field you care about) and large cells in open
+  air, with the smallest and largest sizes set by you.
+- **Work at city scale:** whole cities are stored as tiles in one file, and
+  any tile can be read on its own. All of Osaka (556,724 buildings, 228 km² at
+  1 m) builds in about half a minute into 37 MB.
+- **Take the results elsewhere:** 3D models (OBJ) for Blender or Rhino,
+  arrays for machine learning, and meshes for CFD (OpenFOAM) as an optional
+  plugin.
 
-Dense voxel grids (as in VoxCity) grow with volume: 1 m cells over a city is
-gigabytes, so people fall back to 5 m cells. City geometry is mostly vertical
-walls, flat roofs and layers, so OctreeCity stores runs along z. Size then
-follows the footprint outlines, not the volume.
+<p align="center">
+  <img src="outputs/gifs/sun_day.gif" width="48%" alt="Direct sun on the streets of downtown Osaka through 21 December">
+  <img src="outputs/report/kaist_top_1m.png" width="48%" alt="KAIST campus in Daejeon from V-World buildings and OpenStreetMap">
+</p>
 
-| 20 Osaka tiles, 1 m | dense grid | octree | **columns** |
-|---|---|---|---|
-| zipped on disk | 662 kB | 575 kB | **228 kB** |
-| in memory | 113 MB | 55 MB | **20 MB** |
-| build per 256 m tile | | 17 ms | **1.2 ms** |
-
-## What it does
-
-| Module | |
-|---|---|
-| `columns` | `ColumnCity`: the storage format (CSR runs per column), any number of layers per column, exact round trip to dense grids |
-| `easy` | `city_from_osm(lat, lon, size_m)`: one call, any place, data downloaded from OpenStreetMap |
-| `sources` | readers: CityGML (LoD0-2, streamed), GeoJSON, OSM Overpass JSON, footprint lists |
-| `builder` | `CityBuilder`: terrain, land cover (water, grass, roads...), tree canopies over air, buildings on the terrain |
-| `tiles` | tiled store (one zip, random access per tile), `build_tiled` in parallel, `region()` stitching |
-| `octree` | `LinearOctree`: Morton-ordered leaves, point location, 2:1 balance, refinement near surfaces, 2 bytes per leaf on disk |
-| `city` | `build_city(heights, pixel_size, min_cell, max_cell)`: user-chosen min/max cell size in metres |
-| `adapt` | split-and-merge adaptation to **any field** (wind, sun hours, noise, ML output) with min/max size, buffer layers, cell budget, value transfer |
-| `analysis` | sky view factor, shadows, sun position, sun hours; surface or exact rays (light passes under canopies) |
-| `exports` | OBJ meshes (merged faces, one material per label), 2D/3D tensors for ML |
-| `foam` | CFD plugin: OpenFOAM polyMesh of the fluid cells, with hanging-node faces |
-| `viz` | interactive 3D (plotly): `show(city)`, results on the street, adaptive cells on a cut |
-| `render` | shaded top views and sections (images) |
-
-![Sky view factor and winter sun hours, downtown Osaka](https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/osaka_1m_svf_sun.png)
+*Left: where the sun reaches the streets of downtown Osaka on the shortest day.
+Right: the KAIST campus from V-World buildings and OpenStreetMap land cover.*
 
 ## Install
 
 ```bash
-pip install octreecity              # core: storage, builders, analysis, exports
-pip install "octreecity[viz]"       # + interactive 3D views and images
-pip install "octreecity[notebook]"  # + JupyterLab, to run the tutorial notebook
+pip install octreecity              # core
+pip install "octreecity[viz]"       # with interactive 3D views and images
+pip install "octreecity[notebook]"  # with JupyterLab for the tutorial notebook
 ```
 
-From source: `git clone https://github.com/MahmoudAbdelRahman/octreecity && cd octreecity && uv sync`.
+Python 3.10 or newer. From source:
+`git clone https://github.com/MahmoudAbdelRahman/octreecity && cd octreecity && uv sync`
 
-## Start in one minute
+## Quick start
 
 ```python
 from octreecity.easy import city_from_osm
+from octreecity.viz import show, show_values, street_map
 from octreecity.analysis import street_points, sky_view_factor
 
-city = city_from_osm(37.4979, 127.0276, size_m=800)   # any place: OSM buildings, land cover, trees, roads
-pts, _ = street_points(city, every=2)
+city = city_from_osm(36.3700, 127.3625, size_m=1000)   # KAIST, Daejeon: any lat, lon works
+show(city)                                              # interactive 3D
+
+pts, where = street_points(city, every=4)               # 1.5 m above the ground
 svf = sky_view_factor(city, pts)
+show_values(city, street_map(city, where, svf, 4), "Sky view factor", colorscale="Cividis")
 ```
 
-Notebook: [notebooks/octreecity_quickstart.ipynb](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/notebooks/octreecity_quickstart.ipynb) (3D views, step by step).
-Full docs: [quickstart](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/quickstart.md), [3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/visualize.md), [inputs](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/inputs.md),
-[analysis](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/analysis.md), [octrees and adaptation](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/octree.md),
-[exports](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/exports.md), [whole cities](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/tiles.md), [command line](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/cli.md),
-[file formats](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/formats.md).
+The tutorial notebook goes through it step by step, with a 3D view after each
+step: [notebooks/octreecity_quickstart.ipynb](notebooks/octreecity_quickstart.ipynb).
+Run it with `./demo.sh` (see [running the notebook](docs/how-to/run-the-notebook.md)).
 
-![Gangnam from one call](https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/gangnam_osm.png)
-
-## Run the notebook (and demo it without surprises)
-
-```bash
-cd octreecity
-./demo.sh
-```
-
-`demo.sh` installs everything and opens the quickstart notebook in the
-project's own JupyterLab. That JupyterLab includes the plotly plugin, so the 3D
-views draw offline, without a "trust" step. In VS Code, open the notebook and
-choose the project's `.venv` kernel.
-
-To avoid blank 3D views:
-
-- Start Jupyter from the project (`./demo.sh` or `uv run jupyter lab`), not
-  with `uv run --with jupyterlab ...`. That starts JupyterLab from a separate
-  environment without the plotly plugin.
-- The notebook's first cell calls `setup_notebook()`. It also sends each view as
-  a web page, so other front ends (classic Jupyter, nbviewer) still show it when
-  online.
-- Before a talk, run all cells once (Kernel > Restart and Run All, about 40 s).
-  The OSM download is then cached in `data/`, and the demo works with no
-  internet.
-- Backup: a web-page version of the notebook can be built with
-  `uv run python scripts/notebook_report.py` (writes `outputs/report/quickstart_page.html`).
-
-## Use with your own data
+## Using your own data
 
 ```python
 from octreecity.sources import read_citygml
 from octreecity.builder import CityBuilder
-from octreecity.analysis import street_points, sky_view_factor
 
-bld = read_citygml("buildings.gml.gz").clip(x0, y0, x0 + 1000, y0 + 1000)
-b = CityBuilder(x0, y0, 1000, 1000, cell=1.0)
-b.add_terrain(dem)             # raster or callable(x, y), metres
-b.add_buildings(bld)
-city = b.build()               # ColumnCity
+buildings = read_citygml("buildings.gml.gz").clip(x0, y0, x0 + 1000, y0 + 1000)
+b = CityBuilder(x0, y0, width=1000, depth=1000, cell=1.0)   # metres, projected CRS
+b.add_terrain(dem)                                           # raster or function of (x, y)
+b.add_buildings(buildings)
+city = b.build()
 city.save("city.npz")
-
-pts, _ = street_points(city, every=2)
-svf = sky_view_factor(city, pts)
-tree = city.to_octree(5)       # adaptive cells, 1 m to 32 m
 ```
 
-Command line:
+From the command line:
 
 ```bash
-octreecity tiles --wkb-pickle buildings.pkl.gz --cell 1 -o city.ocz
-octreecity info city.ocz
-octreecity svf city.ocz --region 40 46 44 50 -o svf.png
+octreecity build --citygml buildings.gml.gz --cell 1 -o city.npz
+octreecity svf city.npz -o svf.png
 octreecity sun city.npz --lat 34.69 --lon 135.5 --tz 9 --date 2026-12-21 -o sun.png
 octreecity obj city.npz -o city.obj
-octreecity foam city.npz --max-cell 16 --near 8 -o case/
 ```
 
-All lengths are metres, in the projected CRS of the input data.
+## How it works
 
-## Status: alpha (0.1)
+A city is mostly vertical walls, flat roofs and layers. OctreeCity uses two
+representations of the same voxels:
 
-Works and is tested (56 tests, Python 3.10 to 3.13) on Osaka (PLATEAU) and Daejeon (V-World CityGML
-plus OpenStreetMap). Known gaps:
+1. **Columns (for storage).** Each vertical column keeps a short list of runs:
+   *ground up to 1 m, building up to 67 m, air above*. A column can hold any
+   number of layers, such as a tree canopy with air beneath it, or a bridge.
+   The model's size then follows the outlines of buildings rather than their
+   volume, so storing 1 m detail for a whole city becomes practical.
+2. **Octrees (for computation).** When an application needs cells of varying
+   size, an octree is built from the columns: cubes of 1, 2, 4 ... m that stay
+   small where detail matters. They can follow geometry (near surfaces) or any
+   field you provide (`adapt()`, the split-and-merge idea used by adaptive
+   CFD codes).
 
-- No DEM reader yet. The KAIST demo estimates terrain from building base heights.
-- The OpenFOAM export passes the package's own closedness and volume checks, but
-  has not been run through OpenFOAM `checkMesh` yet. It takes about 24 s for
-  1.7 M cells (binary files).
-- Ray analyses: direct sun and sky visibility only (no reflections or diffuse
-  light), trees opaque, grid north taken as true north.
-- The tiled builder takes buildings and land cover, not yet trees or terrain.
-- File formats may still change before 1.0.
+Every cell keeps a label (ground, building, tree, water, grass, road ... or
+your own classes), and any dense voxel grid can be converted in and out
+exactly.
+
+![Cells split where the wind field changes and merge where it is calm](outputs/gifs/adapt.gif)
+
+*Adaptive cells on a simulated wind field: start coarse, split where neighbouring
+values differ, merge where they agree, repeat.*
+
+## Documentation
+
+The [documentation](docs/index.md) is organised by what you want to do:
+
+- **Tutorials:** [quickstart](docs/tutorials/quickstart.md) and the [notebook](notebooks/octreecity_quickstart.ipynb)
+- **How-to guides:** [your own data](docs/how-to/own-data.md), [3D views](docs/how-to/3d-views.md),
+  [sky view and sun](docs/how-to/sky-and-sun.md), [whole cities](docs/how-to/whole-cities.md),
+  [export](docs/how-to/export.md), [running the notebook](docs/how-to/run-the-notebook.md)
+- **Explanation:** [how it works](docs/explanation/how-it-works.md), [adaptive cells](docs/explanation/adaptive-cells.md)
+- **Reference:** [modules](docs/reference/api.md), [command line](docs/reference/cli.md), [file formats](docs/reference/file-formats.md)
+
+## Related work
+
+OctreeCity builds on ideas from a lively field and is meant to work alongside
+existing tools:
+
+- [VoxCity](https://github.com/kunifujiwara/VoxCity) generates grid-based 3D
+  city models from global open data and runs urban simulations on them. Any
+  dense voxel grid, such as a VoxCity model with its classes mapped to
+  OctreeCity labels, can be loaded with `ColumnCity.from_dense`.
+- [OpenVDB](https://www.openvdb.org/) and sparse voxel octrees in computer
+  graphics, for sparse and hierarchical volumes.
+- Adaptive mesh refinement in CFD (for example OpenFOAM and Basilisk), which
+  inspired `adapt()`.
+- Open city data such as [PLATEAU](https://www.mlit.go.jp/plateau/),
+  [V-World](https://www.vworld.kr/) and
+  [OpenStreetMap](https://www.openstreetmap.org/).
+
+## Status
+
+Version 0.1 (alpha). It is tested (56 tests, Python 3.10 to 3.13) with Osaka
+(PLATEAU) and Daejeon (V-World and OpenStreetMap). File formats may still
+change before 1.0. Known gaps:
+
+- No elevation model (DEM) reader yet. `city_from_osm` uses flat terrain.
+- The OpenFOAM export passes the package's own mesh checks but has not yet
+  been verified with OpenFOAM's `checkMesh`.
+- Ray analyses cover direct sun and sky visibility (no reflections or diffuse
+  light), and trees are treated as opaque.
+- The parallel tiled builder handles buildings and land cover, not yet trees
+  or terrain.
+
+Questions, ideas and issues are welcome on
+[GitHub](https://github.com/MahmoudAbdelRahman/octreecity/issues).
 
 ## Data credits
 
-Demo data, not included in the repository: PLATEAU (MLIT Japan) for Osaka,
-V-World (Korea) for Daejeon buildings, and © OpenStreetMap contributors (ODbL)
-for land cover, trees and roads in the KAIST images.
+Images in this README use PLATEAU (MLIT, Japan) for Osaka, V-World (Korea) for
+Daejeon buildings, and © OpenStreetMap contributors (ODbL) for land cover,
+trees and roads. The data itself is not included in the repository.
 
 ## License
 
-MIT, see [LICENSE](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/LICENSE).
+MIT, see [LICENSE](LICENSE).

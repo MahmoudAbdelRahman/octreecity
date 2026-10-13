@@ -105,19 +105,64 @@ def _layout(fig, city, title, height):
     return fig
 
 
-def show(city, labels=None, step=None, title=None, height=700):
+def _edge_trace(segments, name, color="rgba(20,24,30,0.85)", width=1.5, legend=True):
+    """Line segments (N, 2, 3) as one Scatter3d trace. Plain lists with None
+    between segments: compact typed arrays would join all segments into one
+    long line."""
+    import plotly.graph_objects as go
+
+    seg = np.round(np.asarray(segments, np.float64), 1)
+    if len(seg):                                   # drop repeated edges (shared by neighbouring cubes or faces)
+        a, b = seg[:, 0], seg[:, 1]
+        lo = np.where((a[:, 0] < b[:, 0]) | ((a[:, 0] == b[:, 0]) & ((a[:, 1] < b[:, 1]) | ((a[:, 1] == b[:, 1]) & (a[:, 2] <= b[:, 2])))), 0, 1)
+        canon = np.where(lo[:, None, None] == 0, seg, seg[:, ::-1])
+        _, keep = np.unique(canon.reshape(len(seg), 6), axis=0, return_index=True)
+        seg = canon[np.sort(keep)]
+    xs, ys, zs = [], [], []
+    for (a, b) in seg.tolist():
+        xs += [a[0], b[0], None]
+        ys += [a[1], b[1], None]
+        zs += [a[2], b[2], None]
+    return go.Scatter3d(x=xs, y=ys, z=zs, mode="lines", connectgaps=False, name=name,
+                        line=dict(color=color, width=width), hoverinfo="skip", showlegend=legend)
+
+
+def _quad_edges(q):
+    """Unique edges of quads (N, 4, 3) as (M, 2, 3) segments."""
+    e = np.concatenate([q[:, [0, 1]], q[:, [1, 2]], q[:, [2, 3]], q[:, [3, 0]]])
+    key = np.sort(np.round(e, 2).reshape(len(e), 2, 3).view([("", np.float64)] * 3).reshape(len(e), 2), axis=1)
+    _, first = np.unique(key.view(np.dtype((np.void, key.dtype.itemsize * 2))), return_index=True)
+    return e[np.sort(first)]
+
+
+def show(city, labels=None, step=None, title=None, height=700, wireframe=False, max_edges=60_000):
     """Interactive 3D view of a ColumnCity (drag to rotate, scroll to zoom).
 
     labels: which labels to draw (default: every solid label).
     step: display simplification (merge step x step cells); chosen
     automatically for big cities.
+    wireframe: True draws the faces with their edges on top, "only" draws
+    just the edges (see-through), to explain how the model is built. For
+    wireframes, crop a small area first (city.crop): at most max_edges
+    edges are drawn.
     """
     import plotly.graph_objects as go
+
+    from .exports import surface_quads
 
     step = _auto_step(city) if step is None else step
     view = downsample(city, step)
     labels = [int(v) for v in np.unique(view.label) if v != AIR] if labels is None else labels
-    fig = go.Figure(_meshes(view, labels))
+    traces = [] if wireframe == "only" else _meshes(view, labels)
+    if wireframe:
+        q, lab = surface_quads(view, labels=labels)
+        q = q - np.array([view.origin[0], view.origin[1], 0])
+        edges = _quad_edges(q)
+        if len(edges) > max_edges:
+            raise ValueError(f"{len(edges):,} edges: crop a smaller area (city.crop) or raise max_edges")
+        color = "rgba(20,24,30,0.85)" if wireframe != "only" else "rgba(240,166,90,0.9)"
+        traces.append(_edge_trace(edges, "edges", color=color, width=1.5 if wireframe != "only" else 2))
+    fig = go.Figure(traces)
     km = city.shape[0] * city.voxel_size
     note = "" if step == 1 else f", shown at {view.voxel_size:g} m"
     return _layout(fig, view, title or f"{km:g} x {city.shape[1] * city.voxel_size:g} m city{note}", height)
@@ -231,7 +276,7 @@ def _level_grid(tree):
     return lev, tree.to_dense()
 
 
-def show_octree(tree, style="shells", title=None, height=700, cut=None):
+def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=25_000):
     """3D view of an adaptive octree.
 
     style="shells": nested see-through envelopes; shell k holds every air
@@ -240,6 +285,9 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None):
     style="cutaway": the octree as a block with one corner removed; the two
         cut faces show the cells (coloured by size), buildings stand in the
         rest. cut=(x, y) in metres sets the corner (default: block centre).
+    style="wire": every air cell drawn as a wire cube coloured by size,
+        around solid buildings. Best on a small block (city.crop); at most
+        max_cells cubes are drawn.
     """
     import plotly.graph_objects as go
 
@@ -250,7 +298,30 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None):
     solid = lab != AIR
     levels = [int(v) for v in np.unique(lev[~solid])]
     traces = []
-    if style == "shells":
+    if style == "wire":
+        X, Y, Z = tree.corners()
+        S = tree.sizes()
+        air = tree.label == AIR
+        if air.sum() > max_cells:
+            raise ValueError(f"{int(air.sum()):,} air cells: crop a smaller block (city.crop) or raise max_cells")
+        cube = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], float)
+        pairs = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
+        levels_air = sorted(np.unique(tree.level[air]))
+        for k, L in enumerate(levels_air):
+            m = air & (tree.level == L)
+            corner = np.stack([X[m], Y[m], Z[m]], 1) * c + np.array([0, 0, tree.origin[2]])
+            size = (S[m] * c)[:, None, None]
+            v = corner[:, None, :] + cube[None] * size
+            seg = np.stack([v[:, [a, b]] for a, b in pairs], 1).reshape(-1, 2, 3)
+            rgb = SIZE_COLORS[int(L) % len(SIZE_COLORS)].lstrip("#")
+            r, g, bl = (int(rgb[i:i + 2], 16) for i in (0, 2, 4))
+            alpha = 0.95 - 0.6 * k / max(1, len(levels_air) - 1)       # big cells fade, small cells stand out
+            traces.append(_edge_trace(seg, f"{(1 << int(L)) * c:g} m cells", color=f"rgba({r},{g},{bl},{alpha:.2f})",
+                                      width=2.0 if k == 0 else 1.4))
+        cols = ColumnCity.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
+        traces = _meshes(cols, [BUILDING, TREE]) + traces
+        default_title = "Octree cells as wire cubes: small near surfaces, large in open air"
+    elif style == "shells":
         shell_colors = ["#ff8a3d", "#ffd23f", "#5fd3a8", "#4f9cf0", "#a77bf0"]
         shell_opac = [0.65, 0.32, 0.18, 0.1, 0.07]
         for k, L in enumerate(levels[:-1]):
@@ -328,8 +399,10 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None):
     fig = go.Figure(traces)
     fig = _layout(fig, ColumnCity(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
                                   np.zeros(0, np.uint8), c, tree.origin), title or default_title, height)
-    if style != "shells":
+    if style == "cutaway":
         fig.update_layout(scene_camera=dict(eye=dict(x=-1.1, y=-1.1, z=0.7)))
+    if style == "wire":
+        fig.update_layout(scene_camera=dict(eye=dict(x=-1.45, y=-1.65, z=0.75)))
     return fig
 
 

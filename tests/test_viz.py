@@ -40,3 +40,19 @@ def test_show_octree_styles():
     cut = show_octree(t, style="cutaway")
     names = [tr.name for tr in cut.data if tr.showlegend]
     assert len(names) == len(set(names)) and any("m cells" in n for n in names)
+
+
+def test_wireframes():
+    import pytest
+
+    from octreecity.viz import show_octree
+
+    c = city()
+    f = show(c, wireframe=True, step=1)
+    edges = [t for t in f.data if t.type == "scatter3d"]
+    assert edges and None in edges[0].x            # segments separated by gaps
+    assert all(t.type == "scatter3d" for t in show(c, wireframe="only", step=1).data)
+    with pytest.raises(ValueError, match="crop"):
+        show(c, wireframe=True, step=1, max_edges=10)
+    w = show_octree(c.to_octree(3), style="wire")
+    assert any("m cells" in (t.name or "") for t in w.data if t.type == "scatter3d")

@@ -130,6 +130,17 @@ code("""
 show_octree(cells, style="cutaway")
 """)
 md("""
+**Wire view:** every air cell as a wire cube, on a smaller 128 m block with
+2 m smallest cells. Dense small cubes hug the ground and buildings; large faint
+cubes fill the open air.
+""")
+code("""
+from octreecity.viz import downsample
+
+small = downsample(city.crop(436, 436, 128, 128), 2).to_octree(3)   # 2 to 16 m cells
+show_octree(small, style="wire")
+""")
+md("""
 **Shell view:** nested see-through envelopes. The inner shell holds all the
 1 m cells, the next one everything up to 2 m, and so on. Click legend entries
 to peel the shells away.

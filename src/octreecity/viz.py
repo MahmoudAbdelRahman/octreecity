@@ -286,8 +286,9 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
         cut faces show the cells (coloured by size), buildings stand in the
         rest. cut=(x, y) in metres sets the corner (default: block centre).
     style="wire": every air cell drawn as a wire cube coloured by size,
-        around solid buildings. Best on a small block (city.crop); at most
-        max_cells cubes are drawn.
+        around solid buildings. If there are more than max_cells air cells,
+        the smallest sizes are hidden (and listed in the legend) so the view
+        stays responsive; crop a smaller block to see every cell.
     """
     import plotly.graph_objects as go
 
@@ -302,8 +303,14 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
         X, Y, Z = tree.corners()
         S = tree.sizes()
         air = tree.label == AIR
-        if air.sum() > max_cells:
-            raise ValueError(f"{int(air.sum()):,} air cells: crop a smaller block (city.crop) or raise max_cells")
+        # too many cubes to draw: hide the smallest sizes first and say so in the legend
+        hidden = []
+        for L in sorted(np.unique(tree.level[air])):
+            if air.sum() <= max_cells:
+                break
+            m = air & (tree.level == L)
+            hidden.append(((1 << int(L)) * c, int(m.sum())))
+            air = air & ~m
         cube = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], float)
         pairs = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
         levels_air = sorted(np.unique(tree.level[air]))
@@ -318,6 +325,10 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
             alpha = 0.95 - 0.6 * k / max(1, len(levels_air) - 1)       # big cells fade, small cells stand out
             traces.append(_edge_trace(seg, f"{(1 << int(L)) * c:g} m cells", color=f"rgba({r},{g},{bl},{alpha:.2f})",
                                       width=2.0 if k == 0 else 1.4))
+        for size, n in hidden:                       # legend note for sizes left out
+            traces.append(go.Scatter3d(x=[None], y=[None], z=[None], mode="lines",
+                                       name=f"{size:g} m cells hidden ({n:,}, too many to draw)",
+                                       line=dict(color="rgba(150,150,150,0.4)", width=1), hoverinfo="skip"))
         cols = ColumnCity.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
         traces = _meshes(cols, [BUILDING, TREE]) + traces
         default_title = "Octree cells as wire cubes: small near surfaces, large in open air"

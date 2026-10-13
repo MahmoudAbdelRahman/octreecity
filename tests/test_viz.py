@@ -56,3 +56,13 @@ def test_wireframes():
         show(c, wireframe=True, step=1, max_edges=10)
     w = show_octree(c.to_octree(3), style="wire")
     assert any("m cells" in (t.name or "") for t in w.data if t.type == "scatter3d")
+
+
+def test_wire_hides_smallest_when_too_many():
+    from octreecity.viz import show_octree
+
+    t = city().to_octree(3)
+    n_air = int((t.label == 0).sum())
+    f = show_octree(t, style="wire", max_cells=n_air // 3)
+    names = [tr.name or "" for tr in f.data]
+    assert any("hidden" in n for n in names)

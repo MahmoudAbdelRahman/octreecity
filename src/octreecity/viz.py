@@ -420,8 +420,9 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
 def setup_notebook(fallback=None):
     """Make 3D views show up in any notebook front end. Call once at the top.
 
-    Every view is sent in two forms: plotly's own format (JupyterLab with the
-    plotly plugin, VS Code, Colab draw it directly, offline) and a web-page
+    In Google Colab it uses Colab's own renderer. Elsewhere every view is
+    sent in two forms: plotly's own format (JupyterLab with the plotly
+    plugin and VS Code draw it directly, offline) and a web-page
     fallback that loads plotly.js from the internet for any other front end.
     fallback=False sends only the first form (smaller saved notebooks).
     The environment variable OCTREECITY_LIGHT_NOTEBOOK=1 also turns it off.
@@ -430,6 +431,11 @@ def setup_notebook(fallback=None):
 
     import plotly.io as pio
 
+    import sys
+
+    if "google.colab" in sys.modules:              # Colab draws plotly with its own renderer
+        pio.renderers.default = "colab"
+        return pio.renderers.default
     if fallback is None:
         fallback = os.environ.get("OCTREECITY_LIGHT_NOTEBOOK") != "1"
     pio.renderers.default = "plotly_mimetype+notebook_connected" if fallback else "plotly_mimetype"

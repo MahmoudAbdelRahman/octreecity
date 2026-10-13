@@ -66,3 +66,16 @@ def test_wire_hides_smallest_when_too_many():
     f = show_octree(t, style="wire", max_cells=n_air // 3)
     names = [tr.name or "" for tr in f.data]
     assert any("hidden" in n for n in names)
+
+
+def test_setup_notebook_colab(monkeypatch):
+    import sys, types
+
+    import plotly.io as pio
+
+    from octreecity.viz import setup_notebook
+
+    old = pio.renderers.default
+    monkeypatch.setitem(sys.modules, "google.colab", types.ModuleType("google.colab"))
+    assert setup_notebook() == "colab"
+    pio.renderers.default = old

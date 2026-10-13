@@ -1,6 +1,6 @@
 [project]
 name = "octreecity"
-version = "0.1.1"
+version = "0.1.2"
 description = "Compact, adaptive voxel cities: column storage, octrees on demand, sky view and sun analysis, 3D views, mesh and CFD export"
 authors = [{ name = "Mahmoud AbdelRahman" }]
 license = "MIT"

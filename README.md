@@ -133,6 +133,25 @@ On this 256 m tile of downtown Osaka, 16.8 million fixed 1 m voxels become
 Fewer cells mean less memory, faster analysis and smaller simulation meshes,
 and they make 1 m detail practical at city scale.
 
+### See the cells in 3D
+
+<p align="center">
+  <img src="outputs/report/octree_cutaway.png" width="49%" alt="Octree cut-away: a 256 m block with one corner removed, cells coloured by size">
+  <img src="outputs/report/octree_wire.png" width="49%" alt="Octree cells drawn as wire cubes around buildings">
+</p>
+<p align="center"><em>Left: a 256 m block of Gangnam, Seoul, with one corner cut away; the two cut faces
+show 1 m cells wrapping the ground and buildings, growing to 16 m in open air. Right: every air
+cell of a 128 m block as a wire cube, small near surfaces and large above.</em></p>
+
+Both views are interactive in a notebook, and a wireframe of the buildings
+themselves is one option away:
+
+```python
+from octreecity.viz import show, show_octree
+show_octree(cells, style="cutaway")         # or style="wire", or style="shells"
+show(city.crop(0, 0, 160, 160), wireframe=True)
+```
+
 The trade-offs: cells of different sizes need more bookkeeping than a plain
 array (finding a neighbour is a search rather than an index lookup), and
 some methods expect equal cells. That is why OctreeCity stores cities as

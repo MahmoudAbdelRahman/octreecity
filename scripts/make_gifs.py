@@ -20,7 +20,7 @@ BG, FG, MUTED = "#0f1318", "#e6e9ee", "#8b95a3"
 TMP = ROOT / "outputs/gifs/_frames"
 
 
-def to_gif(pattern, out, fps=10, width=640, colors=64, every=1):
+def to_gif(pattern, out, fps=10, width=640, colors=64, every=1, dither="none"):
     """Frames -> small GIF: shared palette built from the changing pixels,
     only the changed rectangle stored per frame, optional frame skipping."""
     pal = TMP / "palette.png"
@@ -29,14 +29,14 @@ def to_gif(pattern, out, fps=10, width=640, colors=64, every=1):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-framerate", str(fps), "-i", pattern,
                     "-vf", f"{scale},palettegen=max_colors={colors}:stats_mode=diff", str(pal)], check=True)
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-framerate", str(fps), "-i", pattern, "-i", str(pal),
-                    "-lavfi", f"{scale}[x];[x][1:v]paletteuse=dither=none:diff_mode=rectangle",
+                    "-lavfi", f"{scale}[x];[x][1:v]paletteuse=dither={dither}:diff_mode=rectangle",
                     "-r", str(fps), "-loop", "0", str(out)], check=True)
     print(out, f"{out.stat().st_size / 1e6:.2f} MB")
 
 
 def encode_only():
     """Re-encode the three GIFs from frames already on disk (no re-rendering)."""
-    to_gif(str(TMP / "sun/f%03d.png"), OUT / "sun_day.gif", fps=5, width=460, colors=96, every=2)
+    to_gif(str(TMP / "sun/f%03d.png"), OUT / "sun_day.gif", fps=5, width=640, colors=160, every=3, dither="sierra2_4a")
     to_gif(str(TMP / "orbit/f%03d.png"), OUT / "orbit.gif", fps=8, width=460, colors=48, every=2)
     to_gif(str(TMP / "adapt/f%03d.png"), OUT / "adapt.gif", fps=6, width=520, colors=48)
 
@@ -125,7 +125,7 @@ def sun_day():
         frame(k, total, None, "Hours of direct sun on the shortest day",
               f"downtown Osaka at street level, every 2 m; from {len(states)} sun positions", final=True)
         k += 1
-    to_gif(str(d / "f%03d.png"), OUT / "sun_day.gif", fps=5, width=460, colors=96, every=2)
+    to_gif(str(d / "f%03d.png"), OUT / "sun_day.gif", fps=5, width=640, colors=160, every=3, dither="sierra2_4a")
 
 
 def orbit():

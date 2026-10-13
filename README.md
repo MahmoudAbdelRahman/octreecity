@@ -10,7 +10,9 @@ It is meant as a common foundation: build the city once, then use the same
 model to store it, run simulations on it, analyse it, train models on it and
 show it.
 
-![A block of downtown Osaka built from PLATEAU data at 1 m](outputs/gifs/orbit.gif)
+<p align="center">
+  <img src="outputs/gifs/orbit.gif" width="70%" alt="A block of downtown Osaka built from PLATEAU data at 1 m">
+</p>
 
 ## What it is for
 
@@ -26,18 +28,18 @@ you give them (wind, heat, sun, pollutant concentration, a model's output),
 with the smallest and largest cell sizes set by you. Values move between
 refined meshes, and an optional plugin writes OpenFOAM meshes for CFD.
 
-![Cells split where the wind field changes and merge where it is calm](outputs/gifs/adapt.gif)
+<p align="center">
+  <img src="outputs/gifs/adapt.gif" width="80%" alt="Cells split where the wind field changes and merge where it is calm">
+</p>
 
 **Environmental analysis in 3D.** Sky view factor, shadows and hours of direct
 sun for any place and date: at street level, on roofs, or at any point in the
 air. Light can pass through the space under tree canopies and bridges.
 
 <p align="center">
-  <img src="outputs/gifs/sun_day.gif" width="58%" alt="Shadows moving across downtown Osaka on 21 December while the hours of sun add up">
+  <img src="outputs/gifs/sun_day.gif" width="70%" alt="Shadows moving across downtown Osaka on 21 December while the hours of sun add up">
 </p>
-
-*Downtown Osaka on the shortest day: the glow shows where the sun is at that
-moment, and the heatmap adds up the hours of direct sun.*
+<p align="center"><em>Downtown Osaka on the shortest day: the glow shows where the sun is at that moment, and the heatmap adds up the hours of direct sun.</em></p>
 
 **Machine learning.** Labelled cells become 2D or 3D arrays for image and
 volume models, and adaptive cells with their neighbour links form a natural
@@ -51,11 +53,10 @@ models (OBJ) for Blender, Rhino or Unity, shaded maps and sections.
 line, or from your own data: CityGML (PLATEAU, V-World and others), GeoJSON,
 building footprints, terrain rasters, land cover and trees.
 
-![3D shadow volumes: cells refine along shadow edges in the air above Osaka](outputs/report/adapt_sun_section.png)
-
-*Adaptive cells following a 3D field: hours of winter sun in the air above
-downtown Osaka. Cells refine along the edges of shadow volumes and stay large
-in uniform sun or shade.*
+<p align="center">
+  <img src="outputs/report/adapt_sun_section.png" width="100%" alt="3D shadow volumes: cells refine along shadow edges in the air above Osaka">
+</p>
+<p align="center"><em>Adaptive cells following a 3D field: hours of winter sun in the air above downtown Osaka. Cells refine along the edges of shadow volumes and stay large in uniform sun or shade.</em></p>
 
 ## Install
 
@@ -123,7 +124,9 @@ only where it contains something worth resolving: a wall, the ground, a
 change in the field you care about. Cells end up 1 m next to surfaces and up
 to 32 m in open air, with exactly the same detail where geometry is.
 
-![The same vertical slice with fixed 1 m voxels and with octree cells](outputs/report/fixed_vs_octree.png)
+<p align="center">
+  <img src="outputs/report/fixed_vs_octree.png" width="100%" alt="The same vertical slice with fixed 1 m voxels and with octree cells">
+</p>
 
 On this 256 m tile of downtown Osaka, 16.8 million fixed 1 m voxels become
 391,000 octree cells (43 times fewer), with every wall and roof still at 1 m.

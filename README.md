@@ -1,38 +1,61 @@
 # OctreeCity
 
-OctreeCity turns city data into a light 3D model that you can explore,
-analyse and reuse for many kinds of urban questions: how much sky people see
-from the street, where the winter sun reaches, how buildings shape the space
-around them, and what an adaptive grid for simulation or machine learning
-should look like.
+**A compact, adaptive 3D model of cities, for simulation, analysis and
+machine learning.**
+
+OctreeCity turns open city data into a voxel model that stays light enough for
+whole cities at 1 m resolution, adapts its cell sizes to what matters, and keeps
+every cell labelled (ground, building, tree, water, road or your own classes).
+It is meant as a common foundation: build the city once, then use the same
+model to store it, run simulations on it, analyse it, train models on it and
+show it.
 
 ![A block of downtown Osaka built from PLATEAU data at 1 m](outputs/gifs/orbit.gif)
 
-## What you can do with it
+## What it is for
 
-- **Build a 3D city for any place** from OpenStreetMap in one line, or from
-  your own data (CityGML from PLATEAU or V-World, GeoJSON, building footprints),
-  with terrain, land cover, trees and buildings.
-- **Look around it** in interactive 3D views in Jupyter or VS Code.
-- **Ask street-level questions:** sky view factor, shadows and hours of direct
-  sun, for any date and place.
-- **Use adaptive cells:** small cells where detail matters (near walls, the
-  ground, shadow edges or any field you care about) and large cells in open
-  air, with the smallest and largest sizes set by you.
-- **Work at city scale:** whole cities are stored as tiles in one file, and
-  any tile can be read on its own. All of Osaka (556,724 buildings, 228 km² at
-  1 m) builds in about half a minute into 37 MB.
-- **Take the results elsewhere:** 3D models (OBJ) for Blender or Rhino,
-  arrays for machine learning, and meshes for CFD (OpenFOAM) as an optional
-  plugin.
+**City-scale 3D data.** Whole cities are stored as tiles in one file, and any
+tile can be read on its own. All of Osaka (556,724 buildings, 228 km² at 1 m)
+builds in about half a minute into 37 MB. A column of cells can hold any number
+of layers, such as tree canopies with air beneath them, bridges or overhangs,
+and the model converts to and from ordinary voxel grids exactly.
+
+**Simulation grids.** Adaptive octree cells stay small where detail matters
+and grow in open air. They can follow geometry (walls, the ground) or any field
+you give them (wind, heat, sun, pollutant concentration, a model's output),
+with the smallest and largest cell sizes set by you. Values move between
+refined meshes, and an optional plugin writes OpenFOAM meshes for CFD.
+
+![Cells split where the wind field changes and merge where it is calm](outputs/gifs/adapt.gif)
+
+**Environmental analysis in 3D.** Sky view factor, shadows and hours of direct
+sun for any place and date: at street level, on roofs, or at any point in the
+air. Light can pass through the space under tree canopies and bridges.
 
 <p align="center">
-  <img src="outputs/gifs/sun_day.gif" width="48%" alt="Direct sun on the streets of downtown Osaka through 21 December">
-  <img src="outputs/report/kaist_top_1m.png" width="48%" alt="KAIST campus in Daejeon from V-World buildings and OpenStreetMap">
+  <img src="outputs/gifs/sun_day.gif" width="58%" alt="Shadows moving across downtown Osaka on 21 December while the hours of sun add up">
 </p>
 
-*Left: where the sun reaches the streets of downtown Osaka on the shortest day.
-Right: the KAIST campus from V-World buildings and OpenStreetMap land cover.*
+*Downtown Osaka on the shortest day: the glow shows where the sun is at that
+moment, and the heatmap adds up the hours of direct sun.*
+
+**Machine learning.** Labelled cells become 2D or 3D arrays for image and
+volume models, and adaptive cells with their neighbour links form a natural
+graph. Use them as inputs for surrogate models of wind, heat or daylight, or to
+compare places.
+
+**Visualisation and sharing.** Interactive 3D views in Jupyter and VS Code, 3D
+models (OBJ) for Blender, Rhino or Unity, shaded maps and sections.
+
+**Any data source.** Build a city for any place from OpenStreetMap in one
+line, or from your own data: CityGML (PLATEAU, V-World and others), GeoJSON,
+building footprints, terrain rasters, land cover and trees.
+
+![3D shadow volumes: cells refine along shadow edges in the air above Osaka](outputs/report/adapt_sun_section.png)
+
+*Adaptive cells following a 3D field: hours of winter sun in the air above
+downtown Osaka. Cells refine along the edges of shadow volumes and stay large
+in uniform sun or shade.*
 
 ## Install
 
@@ -107,10 +130,9 @@ Every cell keeps a label (ground, building, tree, water, grass, road ... or
 your own classes), and any dense voxel grid can be converted in and out
 exactly.
 
-![Cells split where the wind field changes and merge where it is calm](outputs/gifs/adapt.gif)
-
-*Adaptive cells on a simulated wind field: start coarse, split where neighbouring
-values differ, merge where they agree, repeat.*
+*The animation under "Simulation grids" shows the idea on a simulated wind
+field: start coarse, split where neighbouring values differ, merge where they
+agree, repeat.*
 
 ## Documentation
 

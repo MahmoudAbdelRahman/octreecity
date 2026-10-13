@@ -40,7 +40,8 @@ def frames_dir(name):
 
 
 def sun_day():
-    """Shadows over downtown Osaka on 21 December, sunrise to sunset."""
+    """Downtown Osaka on 21 December: shadows move through the day while the
+    total hours of direct sun build up, ending on the full heatmap."""
     from octreecity.analysis import shadow, street_points, sun_position, surface_height
     from octreecity.tiles import TiledCity
 
@@ -52,42 +53,67 @@ def sun_day():
     lo, hi = M * tc.n, (M + nt) * tc.n
     keep = (ii >= lo) & (ii < hi) & (jj >= lo) & (jj < hi)
     pts, ii, jj = pts[keep], (ii[keep] - lo) // every, (jj[keep] - lo) // every
-    surf = (surface_height(city) - city.origin[2])[lo:hi, lo:hi]
+    surf = (surface_height(city) - city.origin[2])[lo:hi, lo:hi][::every, ::every]
     n = nt * tc.n // every
     tz = timezone(timedelta(hours=9))
-    d = frames_dir("sun")
-    times = [datetime(2026, 12, 21, 7, 20, tzinfo=tz) + timedelta(minutes=10 * k) for k in range(58)]
+    step = 10
+    times = [datetime(2026, 12, 21, 7, 0, tzinfo=tz) + timedelta(minutes=step * k) for k in range(64)]
+    states = []
     hours = np.zeros(len(pts))
-    k = 0
     for t in times:
         az, alt = sun_position(34.69, 135.50, t)
         if alt <= 1:
             continue
         lit = ~shadow(city, pts, az, alt)
-        hours += lit * 10 / 60
+        hours += lit * step / 60
+        states.append((t, az, alt, lit.copy(), hours.copy()))
+    total = states[-1][4]
+    vmax = np.ceil(total.max())
+    cmap = plt.get_cmap("inferno")
+    bld = surf > 3
+    hb = np.clip(surf / 150, 0, 1)
+    bcol = np.array([0.62, 0.65, 0.70])[None] * (0.75 + 0.35 * hb[bld][:, None])
+    compass = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
+    d = frames_dir("sun")
+
+    def frame(k, acc, lit, title, note, final=False):
         g = np.full((n, n), np.nan)
-        g[ii, jj] = lit.astype(float)
-        fig, ax = plt.subplots(figsize=(6.4, 6.9), facecolor=BG)
-        ax.set_facecolor(BG)
-        bld = surf[::every, ::every] > 3
-        img = np.zeros((n, n, 3))
-        img[:] = (0.13, 0.15, 0.19)                       # shade
-        img[g == 1] = (0.98, 0.80, 0.45)                  # sunlit street
-        hb = np.clip(surf[::every, ::every] / 150, 0, 1)
-        img[bld] = (np.array([0.62, 0.65, 0.70])[None] * (0.75 + 0.35 * hb[bld][:, None]))
+        g[ii, jj] = acc
+        img = cmap(np.clip(np.nan_to_num(g) / vmax, 0, 1))[..., :3]
+        img[np.isnan(g)] = (0.13, 0.15, 0.19)
+        if lit is not None:                        # streets in sun right now glow warm white
+            on = np.full((n, n), False)
+            on[ii, jj] = lit
+            img[on] = img[on] * 0.45 + np.array([1.0, 0.93, 0.72]) * 0.55
+        img[bld] = bcol
+        fig = plt.figure(figsize=(6.4, 7.2), facecolor=BG)
+        ax = fig.add_axes([0.02, 0.1, 0.96, 0.82])
         ax.imshow(img.transpose(1, 0, 2), origin="lower", interpolation="nearest")
         ax.set_xticks([])
         ax.set_yticks([])
         for sp in ax.spines.values():
             sp.set_visible(False)
-        compass = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
-        ax.set_title(f"Downtown Osaka, 21 December  {t:%H:%M}  sun from the {compass[int((az + 22.5) // 45) % 8]}, {alt:.0f}° high",
-                     color=FG, fontsize=11, loc="left")
-        ax.text(0, -0.04, "yellow: direct sun on the street   grey: buildings   OctreeCity",
-                transform=ax.transAxes, color=MUTED, fontsize=8.5)
-        fig.subplots_adjust(left=0.02, right=0.98, top=0.93, bottom=0.05)
+        fig.text(0.03, 0.955, title, color=FG, fontsize=11.5, weight="bold" if final else "normal")
+        fig.text(0.03, 0.925, note, color=MUTED, fontsize=9)
+        cax = fig.add_axes([0.06, 0.055, 0.88, 0.018])
+        cax.imshow(cmap(np.linspace(0, 1, 256))[None], aspect="auto", extent=(0, vmax, 0, 1))
+        cax.set_yticks([])
+        cax.tick_params(colors=MUTED, labelsize=8, length=0)
+        for sp in cax.spines.values():
+            sp.set_visible(False)
+        fig.text(0.06, 0.018, "hours of direct sun so far" if not final else "total hours of direct sun, 21 December",
+                 color=MUTED, fontsize=8.5)
         fig.savefig(d / f"f{k:03d}.png", dpi=100, facecolor=BG)
         plt.close(fig)
+
+    k = 0
+    for t, az, alt, lit, acc in states:
+        frame(k, acc, lit, f"Downtown Osaka, 21 December  {t:%H:%M}",
+              f"sun from the {compass[int((az + 22.5) // 45) % 8]}, {alt:.0f} deg high; glow = in sun now")
+        k += 1
+    for _ in range(24):                            # hold the result for 3 s
+        frame(k, total, None, "Hours of direct sun on the shortest day",
+              f"downtown Osaka at street level, every 2 m; from {len(states)} sun positions", final=True)
         k += 1
     to_gif(str(d / "f%03d.png"), OUT / "sun_day.gif", fps=8, width=560)
 

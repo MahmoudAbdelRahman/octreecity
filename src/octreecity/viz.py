@@ -25,6 +25,7 @@ STYLE = {
     ROAD: ("roads", "#6b6f76"),
 }
 BG = "#11151b"
+DISPLAY_COLUMNS = 150_000      # bigger cities are simplified for display only; lower for lighter figures
 
 
 def downsample(city, step):
@@ -51,7 +52,8 @@ def downsample(city, step):
     return ColumnCity.from_dense(out, city.voxel_size * step, city.origin)
 
 
-def _auto_step(city, max_columns=150_000):
+def _auto_step(city, max_columns=None):
+    max_columns = DISPLAY_COLUMNS if max_columns is None else max_columns
     n = city.shape[0] * city.shape[1]
     return max(1, int(np.ceil(np.sqrt(n / max_columns))))
 

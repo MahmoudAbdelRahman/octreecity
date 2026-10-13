@@ -1,4 +1,4 @@
-"""Quick images of a ColumnCity: shaded top view and vertical sections."""
+"""Quick images: shaded top views and sections of a ColumnCity, slices of an octree."""
 
 import numpy as np
 
@@ -76,3 +76,34 @@ def render_section(city, ax, y, x0=0, x1=None):
     ax.imshow(img, origin="lower", extent=(x0 * c, x1 * c, city.origin[2], city.origin[2] + city.shape[2] * c),
               interpolation="nearest", aspect="auto")
     return img
+
+
+def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True):
+    """Draw the leaves cut by the plane axis = index (voxel units)."""
+    from matplotlib.collections import PolyCollection
+
+    if colors is None:
+        colors = dict(COLORS)
+        colors.update({0: "#f4f6fb", 2: "#5b6b8c"})       # light air, darker buildings on a light plot
+    k = "xyz".index(axis)
+    if index is None:
+        index = tree.shape[k] // 2
+    c = tree.corners()
+    s = tree.sizes()
+    hit = (c[k] <= index) & (index < c[k] + s)
+    u, v = [c[i][hit] for i in range(3) if i != k]
+    w = s[hit]
+    quads = np.stack([np.stack([u, v], 1), np.stack([u + w, v], 1),
+                      np.stack([u + w, v + w], 1), np.stack([u, v + w], 1)], 1)
+    fc = [colors.get(int(l), "#d33") for l in tree.label[hit]]
+    pc = PolyCollection(quads * tree.voxel_size, facecolors=fc,
+                        edgecolors="#33333355" if edge else "none", linewidths=0.3)
+    ax.add_collection(pc)
+    dims = [tree.shape[i] * tree.voxel_size for i in range(3) if i != k]
+    ax.set_xlim(0, dims[0])
+    ax.set_ylim(0, dims[1])
+    ax.set_aspect("equal")
+    names = [n for n in "xyz" if n != axis]
+    ax.set_xlabel(f"{names[0]} (m)")
+    ax.set_ylabel(f"{names[1]} (m)")
+    return pc

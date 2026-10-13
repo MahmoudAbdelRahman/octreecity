@@ -42,3 +42,23 @@ def test_tensors():
     assert np.isclose(t[0].max(), 6.0)
     v = tensors_3d(c, [BUILDING, GROUND], factor=2)
     assert v.shape == (2, 20, 15, 12) and 0 <= v.min() and v.max() <= 1
+
+
+def test_write_vtk_and_old_module_name(tmp_path):
+    import importlib
+    import sys
+    import warnings
+
+    from octreecity.exports import write_vtk
+    from octreecity.render import plot_slice
+
+    t = city().to_octree(2)
+    write_vtk(t, tmp_path / "t.vtk")
+    head = (tmp_path / "t.vtk").read_bytes()[:80]
+    assert head.startswith(b"# vtk DataFile") and b"UNSTRUCTURED_GRID" in head
+    sys.modules.pop("octreecity.export", None)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        old = importlib.import_module("octreecity.export")
+    assert any(issubclass(x.category, DeprecationWarning) for x in w)
+    assert old.write_vtk is write_vtk and old.plot_slice is plot_slice

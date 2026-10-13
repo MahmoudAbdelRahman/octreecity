@@ -1,20 +1,23 @@
+# environment and caches
 .venv/
 __pycache__/
-*.vtk
 .pytest_cache/
-viewer/data_tile*.js
-viewer/tile*.html
-outputs/*.mp4
-data/*.npz
-data/osm_*.json
-outputs/exports/
+.ipynb_checkpoints/
+.DS_Store
+
+# generated data and builds (recreate with the scripts)
 data/
+dist/
+site/
+*.vtk
+
+# generated outputs (only the README figures and GIFs are kept in git)
+outputs/*.mp4
+outputs/exports/
+outputs/viz/
+outputs/gifs/_frames/
+
+# files written when running the notebooks
 notebooks/*.npz
 notebooks/*.obj
 notebooks/*.mtl
-.DS_Store
-.ipynb_checkpoints/
-outputs/viz/
-dist/
-outputs/gifs/_frames/
-site/

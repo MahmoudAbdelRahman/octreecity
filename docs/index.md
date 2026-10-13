@@ -17,6 +17,7 @@ The documentation follows the [Diátaxis](https://diataxis.fr/) structure:
 - [Compute sky view, shadows and sun hours](how-to/sky-and-sun.md)
 - [Work with whole cities](how-to/whole-cities.md)
 - [Export to OBJ, ML arrays or OpenFOAM](how-to/export.md)
+- [Save and reuse results](how-to/save-and-reuse.md) (cache cities, octrees, results; Colab and Drive)
 - [Run the notebook and give a demo](how-to/run-the-notebook.md)
 
 ## Explanation: understand the ideas

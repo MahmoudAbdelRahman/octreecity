@@ -163,29 +163,31 @@ class ColumnCity:
     def to_octree(self, max_level, strip=None):
         """Octree of the same voxels, built strip by strip (no full dense grid).
 
-        The top is filled up with air to a multiple of the largest cell
-        (2**max_level voxels); x and y must already be multiples of it.
+        The box is topped up with air to a multiple of the largest cell
+        (2**max_level voxels) in x, y and z, so any city size works: the
+        extra cells lie beyond the city's far (east and north) edges and the
+        top, and merge into large air cells.
         """
         S = 1 << max_level
-        if self.shape[0] % S or self.shape[1] % S:
-            raise ValueError(f"x and y sizes {self.shape[:2]} must be multiples of 2**max_level = {S}; "
-                             "choose a smaller max_level or a city size that divides evenly")
+        nx, ny = self.shape[:2]
+        px, py = -(-nx // S) * S, -(-ny // S) * S
         nz = -(-self.shape[2] // S) * S
         strip = S if strip is None else strip
         if strip % S:
             raise ValueError("strip must be a multiple of 2**max_level")
         codes, levels, labels = [], [], []
-        for x0 in range(0, self.shape[0], strip):
-            x1 = min(self.shape[0], x0 + strip)
-            d = self.to_dense(x0, x1)
-            if nz != d.shape[2]:
-                d = np.concatenate([d, np.full(d.shape[:2] + (nz - d.shape[2],), AIR, np.uint8)], 2)
+        for x0 in range(0, px, strip):
+            x1 = min(px, x0 + strip)
+            d = np.full((x1 - x0, py, nz), AIR, np.uint8)
+            if x0 < nx:
+                part = self.to_dense(x0, min(nx, x1))
+                d[:part.shape[0], :ny, :part.shape[2]] = part
             t = LinearOctree.from_dense(d, max_level)
             x, y, z = t.corners()
             codes.append(morton.encode(x + x0, y, z))
             levels.append(t.level)
             labels.append(t.label)
-        return LinearOctree((*self.shape[:2], nz), max_level, np.concatenate(codes),
+        return LinearOctree((px, py, nz), max_level, np.concatenate(codes),
                             np.concatenate(levels), np.concatenate(labels),
                             self.voxel_size, self.origin)
 

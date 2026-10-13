@@ -71,3 +71,14 @@ def test_crop_and_repr():
     assert sub.shape[:2] == (20, 15) and sub.origin[:2] == (110.0, 70.0)
     assert (sub.to_dense() == col.to_dense()[5:25, 10:25]).all()
     assert "ColumnCity" in repr(col) and "building" in repr(col)
+
+
+def test_to_octree_pads_any_size():
+    g, s, c, nz = random_city(6, n=64, nz=40)
+    col = ColumnCity.from_heightfield(g[:50, :45], s[:50, :45], c[:50, :45], 40)
+    t = col.to_octree(4)
+    t.check()
+    assert t.shape == (64, 48, 48)
+    d = t.to_dense()
+    assert (d[:50, :45, :40] == col.to_dense()).all()
+    assert (d[50:] == 0).all() and (d[:, 45:] == 0).all() and (d[..., 40:] == 0).all()

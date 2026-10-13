@@ -76,7 +76,8 @@ from octreecity.easy import city_from_osm
 from octreecity.viz import show, show_values, street_map
 from octreecity.analysis import street_points, sky_view_factor
 
-city = city_from_osm(36.3700, 127.3625, size_m=1000)   # KAIST, Daejeon: any lat, lon works
+city = city_from_osm(36.3700, 127.3625, size_m=1000,   # KAIST, Daejeon: any lat, lon works
+                     city_cache="kaist_city.npz")       # saved after the first run, loaded after that
 show(city)                                              # interactive 3D
 
 pts, where = street_points(city, every=4)               # 1.5 m above the ground
@@ -153,18 +154,20 @@ from octreecity.easy import city_from_osm
 from octreecity.viz import show, show_octree
 
 city = city_from_osm(36.3700, 127.3625, size_m=1000)   # KAIST, Daejeon
-block = city.crop(372, 372, 256, 256)                  # a 256 m block: x, y, width, depth in metres
-cells = block.to_octree(4)                             # octree with 1, 2, 4, 8 and 16 m cells
-cells.limit_size_near([1, 2, 3, 5, 6, 7], distance=6, max_level=0)   # keep 1 m cells near surfaces
-cells.balance(26)
+cells = city.to_octree(4)                              # octree with 1, 2, 4, 8 and 16 m cells (any city size)
 
-show_octree(cells, style="cutaway")                    # or style="shells"
+show_octree(cells, style="cutaway")                    # or style="shells", or style="wire"
 show(city.crop(300, 300, 160, 160), wireframe=True)    # the buildings as a wireframe
 ```
 
-For `style="wire"`, use a smaller block so every cube stays readable, for
-example `downsample(city.crop(320, 320, 128, 128), 2).to_octree(3)` (see
-[3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/3d-views.md)).
+For a simulation-style mesh, keep cells small near every surface with
+`cells.limit_size_near([1, 2, 3, 5, 6, 7], distance=6, max_level=0)` and
+`cells.balance(26)` (more cells, and slower on a whole city).
+
+On a whole city, `style="wire"` draws the larger cubes and lists the smallest
+sizes it left out; on a block (`city.crop(x, y, width, depth)`) it draws them
+all. See [3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/3d-views.md)
+and [saving results](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/save-and-reuse.md).
 
 The trade-offs: cells of different sizes need more bookkeeping than a plain
 array (finding a neighbour is a search rather than an index lookup), and

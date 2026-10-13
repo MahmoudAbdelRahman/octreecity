@@ -276,7 +276,7 @@ def _level_grid(tree):
     return lev, tree.to_dense()
 
 
-def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=25_000):
+def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=40_000):
     """3D view of an adaptive octree.
 
     style="shells": nested see-through envelopes; shell k holds every air

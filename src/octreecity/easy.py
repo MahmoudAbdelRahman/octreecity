@@ -51,6 +51,8 @@ def fetch_osm(lat, lon, size_m, cache=None, timeout=90):
     With cache (a file path), the answer is saved and reused."""
     if cache and Path(cache).exists():
         return json.loads(Path(cache).read_text())
+    if cache:
+        Path(cache).parent.mkdir(parents=True, exist_ok=True)
     s, w, n, e = bbox_latlon(lat, lon, size_m)
     b = f"({s:.6f},{w:.6f},{n:.6f},{e:.6f})"
     q = (f"[out:json][timeout:{timeout}];("
@@ -85,14 +87,22 @@ def _subset(osm, test):
 
 
 def city_from_osm(lat, lon, size_m=500.0, cell=1.0, cache=None, osm_json=None, buildings=None,
-                  default_height=10.0, level_height=3.0, tree_height=12.0, air_above=20.0):
+                  default_height=10.0, level_height=3.0, tree_height=12.0, air_above=20.0,
+                  city_cache=None):
     """Build a ColumnCity of a size_m square around (lat, lon) from OSM.
 
-    cache: file to keep the downloaded OSM data. osm_json: use this Overpass
-    answer instead of downloading. buildings: Features (same UTM CRS) to use
-    instead of OSM buildings, e.g. from read_citygml + reproject.
-    The city's origin is in UTM metres; city.crs holds the EPSG code.
+    cache: file to keep the downloaded OSM data (.json). city_cache: file to
+    keep the finished city (.npz); if it exists it is loaded instead of
+    building again (delete it to rebuild, e.g. after changing settings).
+    osm_json: use this Overpass answer instead of downloading. buildings:
+    Features (same UTM CRS) to use instead of OSM buildings, e.g. from
+    read_citygml + reproject. The city's origin is in UTM metres; city.crs
+    holds the EPSG code.
     """
+    if city_cache is not None and Path(city_cache).exists():
+        from .columns import ColumnCity
+
+        return ColumnCity.load(city_cache)
     epsg = utm_epsg(lat, lon)
     data = osm_json if osm_json is not None else fetch_osm(lat, lon, size_m, cache)
     osm = read_osm_overpass(data, crs_to=epsg)
@@ -135,6 +145,9 @@ def city_from_osm(lat, lon, size_m=500.0, cell=1.0, cache=None, osm_json=None, b
         b.add_buildings(buildings)
     city = b.build(air_above=air_above)
     city.crs = f"EPSG:{epsg}"
+    if city_cache is not None:
+        Path(city_cache).parent.mkdir(parents=True, exist_ok=True)
+        city.save(city_cache)
     return city
 
 

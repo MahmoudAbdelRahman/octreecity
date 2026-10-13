@@ -23,6 +23,7 @@ nav:
       - Sky view, shadows, sun hours: how-to/sky-and-sun.md
       - Whole cities: how-to/whole-cities.md
       - Export: how-to/export.md
+      - Save and reuse results: how-to/save-and-reuse.md
       - Run the notebook: how-to/run-the-notebook.md
   - Explanation:
       - How OctreeCity works: explanation/how-it-works.md

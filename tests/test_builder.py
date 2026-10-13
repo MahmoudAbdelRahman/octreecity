@@ -70,3 +70,16 @@ def test_city_from_osm_offline():
     labels = set(np.unique(city.label).tolist())
     assert {BUILDING, GRASS, ROAD, TREE} <= labels
     assert city.top_of([BUILDING]).max() * city.voxel_size + city.origin[2] >= 14.0
+
+
+def test_city_cache(tmp_path):
+    from octreecity.easy import city_from_osm
+
+    lat, lon, d = 36.37, 127.36, 0.0009
+    sq = lambda la, lo, s: [{"lat": la + a, "lon": lo + b} for a, b in ((0, 0), (0, s), (s, s), (s, 0), (0, 0))]
+    data = {"elements": [{"type": "way", "tags": {"building": "yes"}, "geometry": sq(lat, lon, d / 4)}]}
+    path = tmp_path / "sub" / "city.npz"
+    a = city_from_osm(lat, lon, size_m=100, osm_json=data, city_cache=path)
+    assert path.exists()
+    b = city_from_osm(lat, lon, size_m=100, osm_json={"elements": []}, city_cache=path)   # loaded, not rebuilt
+    assert (b.to_dense() == a.to_dense()).all() and b.crs == a.crs

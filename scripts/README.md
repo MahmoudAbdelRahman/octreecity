@@ -28,6 +28,7 @@ templates.
 | `demo_voids.py` | surface vs exact rays under tree canopies | `data/kaist_1400m_1m.npz` (from `demo_kaist.py`) |
 | `demo_adapt_sun.py` | `adapt()` following 3D sun hours over Osaka | `data/osaka_1m.ocz` |
 | `bench_formats.py` | storage benchmark: columns vs octree vs dense | Osaka height tiles (urban_wind) |
+| `check_paper_cells.py` | checks the library rebuilds the paper's cells and parent-link graph exactly | paper-code `geo_oct.pkl`, Daejeon height pictures (urban_wind) |
 
 Run any of them from the repository root, for example
 `uv run python scripts/plot_concept.py`.

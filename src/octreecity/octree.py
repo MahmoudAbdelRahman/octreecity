@@ -213,6 +213,15 @@ class LinearOctree:
         h = self.voxel_size
         return np.stack([o + h * (v + c) for o, v in zip(self.origin, (x, y, z))], 1)
 
+    def in_box(self, lo, hi):
+        """Leaves that overlap the box [lo, hi) given in voxels, e.g. one
+        horizontal layer: tree.in_box((0, 0, 0), (nx, ny, 1))."""
+        s = self.sizes()
+        out = np.ones(self.n_leaves, bool)
+        for v, a, b in zip(self.corners(), lo, hi):
+            out &= (v < b) & (v + s > a)
+        return out
+
     def sizes_m(self):
         return self.sizes() * float(self.voxel_size)
 

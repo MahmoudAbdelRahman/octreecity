@@ -22,10 +22,8 @@ import numpy as np
 
 from . import morton
 from .classes import EMPTY
+from .links import FACES, face_pairs  # noqa: F401  (face_pairs kept here for older code)
 from .octree import LinearOctree
-
-FACES = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
-
 
 def sample(tree, field):
     """field(x, y, z) in metres -> value per leaf, at leaf centres."""
@@ -34,29 +32,6 @@ def sample(tree, field):
     c = 0.5 * tree.sizes()
     ox, oy, oz = tree.origin
     return np.asarray(field(ox + h * (x + c), oy + h * (y + c), oz + h * (z + c)), np.float64)
-
-
-def face_pairs(tree, mask=None):
-    """All face-adjacent leaf pairs (a, b), a in mask (default all leaves).
-
-    Each leaf probes the voxel just across each face at its own corner. The
-    leaf found is the same size or larger (then it covers the whole face) or
-    smaller (then the pair is also found from the smaller side, provided
-    that side is in mask), so with mask = all leaves every pair appears.
-    """
-    x, y, z = tree.corners()
-    s = tree.sizes()
-    idx = np.arange(tree.n_leaves) if mask is None else np.nonzero(mask)[0]
-    A, B = [], []
-    for dx, dy, dz in FACES:
-        px = x[idx] + (s[idx] if dx > 0 else -1 if dx < 0 else 0)
-        py = y[idx] + (s[idx] if dy > 0 else -1 if dy < 0 else 0)
-        pz = z[idx] + (s[idx] if dz > 0 else -1 if dz < 0 else 0)
-        ok = ((px >= 0) & (py >= 0) & (pz >= 0) & (px < tree.shape[0])
-              & (py < tree.shape[1]) & (pz < tree.shape[2]))
-        A.append(idx[ok])
-        B.append(tree.locate(px[ok], py[ok], pz[ok]))
-    return np.concatenate(A), np.concatenate(B)
 
 
 def jump_indicator(tree, values, fluid=(EMPTY,)):

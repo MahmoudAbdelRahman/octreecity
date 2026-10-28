@@ -231,6 +231,29 @@ def pixel_map(tree, select, pixel=1, shape=None):
     return out
 
 
+def reach_m(tok, hops, starts=None):
+    """How far information travels in `hops` layers: per start token (default
+    all leaves), the largest horizontal distance (m) to a token it can read
+    after `hops` steps along its keys, plus half that token's diagonal (a
+    parent cell summarises its whole square). Returns the mean."""
+    import scipy.sparse as sp
+
+    T, K = tok.idx.shape
+    A = sp.csr_matrix((tok.valid.ravel().astype(np.float32), (np.repeat(np.arange(T), K), tok.idx.ravel())),
+                      shape=(T, T))
+    A = ((A + sp.eye(T)) > 0).astype(np.float32)
+    starts = np.nonzero(tok.is_leaf)[0] if starts is None else np.asarray(starts)
+    R = sp.csr_matrix((np.ones(len(starts)), (np.arange(len(starts)), starts)), shape=(len(starts), T))
+    for _ in range(hops):
+        R = ((R @ A) > 0).astype(np.float32)
+    R = R.tocoo()
+    xy = tok.position[:, :2]
+    d = np.hypot(*(xy[R.col] - xy[starts[R.row]]).T) + tok.size[R.col] / np.sqrt(2)
+    far = np.zeros(len(starts))
+    np.maximum.at(far, R.row, d)
+    return float(far.mean())
+
+
 def batches(token_sets, size, rng=None):
     """Yield Tokens.concat of `size` token sets at a time (shuffled with rng)."""
     order = np.arange(len(token_sets)) if rng is None else rng.permutation(len(token_sets))
@@ -238,4 +261,4 @@ def batches(token_sets, size, rng=None):
         yield Tokens.concat([token_sets[j] for j in order[i:i + size]])
 
 
-__all__ = ["Tokens", "tokens", "pixel_map", "batches"]
+__all__ = ["Tokens", "tokens", "pixel_map", "batches", "reach_m"]

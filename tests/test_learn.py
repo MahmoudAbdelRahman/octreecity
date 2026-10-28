@@ -63,3 +63,11 @@ def test_pixel_map(tree):
     x, y, _ = (v[sel] for v in tree.corners())
     assert (pm[x, y] == np.arange(sel.sum())).all()
     assert pixel_map(tree, sel, pixel=2).shape == (16, 16)
+
+
+def test_reach_grows_with_hops(tree):
+    from octreecity.learn import reach_m
+
+    tok = tokens(tree, ["size_m"], neighbours(tree, mask=tree.in_box((0, 0, 0), (32, 32, 1))),
+                 select=tree.in_box((0, 0, 0), (32, 32, 1)))
+    assert 0 < reach_m(tok, 1) < reach_m(tok, 3)

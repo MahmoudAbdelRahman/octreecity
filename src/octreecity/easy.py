@@ -23,7 +23,7 @@ from . import urban
 from .builder import CityBuilder
 
 from .urban import GRASS, PAVEMENT, ROAD, WATER
-from .sources import Features, read_osm_overpass
+from .features import Features, read_osm_overpass
 
 OVERPASS = ["https://overpass-api.de/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter",

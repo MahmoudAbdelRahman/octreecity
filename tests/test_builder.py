@@ -7,7 +7,7 @@ from octreecity.builder import CityBuilder, rasterize
 
 from octreecity.urban import GRASS, ROAD
 from octreecity.urban import AIR, BUILDING, GROUND, TREE
-from octreecity.sources import Features, read_citygml
+from octreecity.features import Features, read_citygml
 
 
 def test_rasterize_square_and_hole():

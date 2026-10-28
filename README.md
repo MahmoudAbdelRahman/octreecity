@@ -92,7 +92,7 @@ Run it with `./demo.sh` (see [running the notebook](https://github.com/MahmoudAb
 ## Using your own data
 
 ```python
-from octreecity.sources import read_citygml
+from octreecity.features import read_citygml
 from octreecity.builder import CityBuilder
 
 x0, y0 = 232031.0, 418662.0                 # south-west corner, in the data's coordinates (metres)

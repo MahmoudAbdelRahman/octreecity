@@ -134,7 +134,7 @@ def _column_slice(t, x, n, nz):
 
 def _build_one(args):
     from .builder import CityBuilder
-    from .sources import Features
+    from .features import Features
     import shapely
 
     i, j, x0, y0, tile, cell, air_above, bld, layers = args

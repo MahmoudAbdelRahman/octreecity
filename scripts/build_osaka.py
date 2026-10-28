@@ -18,7 +18,7 @@ import numpy as np
 import shapely
 
 from octreecity.builder import CityBuilder
-from octreecity.sources import Features
+from octreecity.features import Features
 from octreecity.tiles import TiledCityWriter
 
 SRC = Path.home() / "Projects/urban_wind/data/cities/osaka/buildings.pkl.gz"

@@ -23,7 +23,7 @@ from octreecity.builder import CityBuilder
 from octreecity.urban import GRASS, PAVEMENT, ROAD, WATER
 from octreecity.urban import BUILDING, GROUND, TREE
 from octreecity.render import render_top
-from octreecity.sources import Features, read_citygml, read_osm_overpass
+from octreecity.features import Features, read_citygml, read_osm_overpass
 
 ROOT = Path(__file__).resolve().parent.parent
 GML = Path.home() / "Projects/urban_wind/data/raw/daejeon_kaist_vworld_all.gml.gz"

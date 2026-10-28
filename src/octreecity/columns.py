@@ -17,7 +17,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from . import morton
 from .classes import EMPTY, Classes
 from .octree import LinearOctree
 
@@ -162,36 +161,21 @@ class ColumnCity:
         lengths = (self.top[k0:k1].astype(np.int64) - self.bottoms()[k0:k1])
         return np.repeat(self.label[k0:k1], lengths).reshape(x1 - x0, ny, nz)
 
-    def to_octree(self, max_level, strip=None):
-        """Octree of the same voxels, built strip by strip (no full dense grid).
+    def to_octree(self, max_level):
+        """Octree of the same voxels: the smallest tree whose leaves each hold
+        one class. Built top-down from the runs (octreecity.build with
+        ColumnSource and the mixed() rule), without a voxel grid.
 
-        The box is topped up with air to a multiple of the largest cell
-        (2**max_level voxels) in x, y and z, so any city size works: the
+        The box is topped up with empty space to a multiple of the largest
+        cell (2**max_level voxels) in x, y and z, so any city size works: the
         extra cells lie beyond the city's far (east and north) edges and the
-        top, and merge into large air cells.
+        top, and merge into large empty cells.
         """
-        S = 1 << max_level
-        nx, ny = self.shape[:2]
-        px, py = -(-nx // S) * S, -(-ny // S) * S
-        nz = -(-self.shape[2] // S) * S
-        strip = S if strip is None else strip
-        if strip % S:
-            raise ValueError("strip must be a multiple of 2**max_level")
-        codes, levels, labels = [], [], []
-        for x0 in range(0, px, strip):
-            x1 = min(px, x0 + strip)
-            d = np.full((x1 - x0, py, nz), EMPTY, np.uint8)
-            if x0 < nx:
-                part = self.to_dense(x0, min(nx, x1))
-                d[:part.shape[0], :ny, :part.shape[2]] = part
-            t = LinearOctree.from_dense(d, max_level)
-            x, y, z = t.corners()
-            codes.append(morton.encode(x + x0, y, z))
-            levels.append(t.level)
-            labels.append(t.label)
-        return LinearOctree((px, py, nz), max_level, np.concatenate(codes),
-                            np.concatenate(levels), np.concatenate(labels),
-                            self.voxel_size, self.origin, classes=self.classes)
+        from .build import build
+        from .rules import mixed
+        from .sources import ColumnSource
+
+        return build(ColumnSource(self), mixed(), max_level)
 
     # --------------------------------------------------------------------- io
 

@@ -22,7 +22,7 @@ import numpy as np
 
 
 def _load_features(a):
-    from .sources import Features, read_citygml, read_geojson
+    from .features import Features, read_citygml, read_geojson
 
     if a.citygml:
         f = read_citygml(a.citygml)

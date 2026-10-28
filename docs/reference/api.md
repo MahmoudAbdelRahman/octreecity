@@ -3,7 +3,7 @@
 | Module | What it contains |
 |---|---|
 | `octreecity.easy` | `city_from_osm(lat, lon, size_m)`: one call, any place, data from OpenStreetMap |
-| `octreecity.sources` | `read_citygml`, `read_geojson`, `read_osm_overpass`, `Features`, `reproject` |
+| `octreecity.features` | `read_citygml`, `read_geojson`, `read_osm_overpass`, `Features`, `reproject` |
 | `octreecity.builder` | `CityBuilder`: terrain, land cover, trees, buildings; `rasterize`; label constants |
 | `octreecity.columns` | `ColumnCity`: the storage format, `crop`, `to_octree`, `to_dense`, `save` / `load` |
 | `octreecity.tiles` | `build_tiled`, `TiledCity` (`tile`, `region`), `TiledCityWriter` |

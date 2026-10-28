@@ -29,6 +29,7 @@ templates.
 | `demo_adapt_sun.py` | `adapt()` following 3D sun hours over Osaka | `data/osaka_1m.ocz` |
 | `bench_formats.py` | storage benchmark: columns vs octree vs dense | Osaka height tiles (urban_wind) |
 | `check_paper_cells.py` | checks the library rebuilds the paper's cells and parent-link graph exactly | paper-code `geo_oct.pkl`, Daejeon height pictures (urban_wind) |
+| `train_parents_lib.py` | the paper's parent-links experiment (variant B) written with the library; `--check` shows the model equals the paper's | paper-code `geo_oct.pkl`, Daejeon height pictures, torch |
 
 Run any of them from the repository root, for example
 `uv run python scripts/plot_concept.py`.

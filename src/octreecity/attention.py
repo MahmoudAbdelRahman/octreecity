@@ -135,7 +135,7 @@ def fit(model, token_sets, steps=1000, sets_per_step=2, lr=1e-3, weight_decay=1e
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         sched.step()
-        hist.append(float(lv))
+        hist.append(lv.item())
         if log_every and step % log_every == 0:
             print(step, round(hist[-1], 4), flush=True)
     model.eval()

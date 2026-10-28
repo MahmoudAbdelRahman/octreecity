@@ -1,7 +1,7 @@
 import numpy as np
 
 from octreecity.columns import ColumnCity
-from octreecity.octree import BUILDING
+from octreecity.urban import BUILDING
 from octreecity.viz import downsample, show, show_cells, show_values
 
 

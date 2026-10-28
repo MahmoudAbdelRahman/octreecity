@@ -19,7 +19,7 @@ import zipfile
 import numpy as np
 
 from .columns import ColumnCity
-from .octree import AIR
+from .classes import EMPTY as AIR  # empty space
 
 
 class TiledCityWriter:

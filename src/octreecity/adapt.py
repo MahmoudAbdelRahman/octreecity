@@ -9,7 +9,7 @@ Basilisk adapt_wavelet):
         values = sample(tree, field)          # solve again on the new mesh
 
 Error indicator per leaf: the largest jump |v_i - v_j| to a face neighbour
-(both in the fluid). Leaves above refine_tol split, and so do `buffer`
+(both in the fluid: open space, class 0 = empty by default). Leaves above refine_tol split, and so do `buffer`
 layers of neighbours. Groups of 8 sibling leaves merge when every one of
 them is below coarsen_tol (default refine_tol / 2, a gap that stops cells
 flipping back and forth). Geometry is a hard limit: only leaves with a
@@ -21,7 +21,8 @@ max_level] and the result is 2:1 balanced.
 import numpy as np
 
 from . import morton
-from .octree import AIR, LinearOctree
+from .classes import EMPTY
+from .octree import LinearOctree
 
 FACES = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
 
@@ -58,7 +59,7 @@ def face_pairs(tree, mask=None):
     return np.concatenate(A), np.concatenate(B)
 
 
-def jump_indicator(tree, values, fluid=(AIR,)):
+def jump_indicator(tree, values, fluid=(EMPTY,)):
     """Largest |value jump| from each leaf to its fluid face neighbours."""
     ind = np.zeros(tree.n_leaves)
     isf = np.isin(tree.label, fluid)
@@ -91,7 +92,7 @@ def transfer(old, old_values, new):
     return out
 
 
-def adapt(tree, values, refine_tol, coarsen_tol=None, fluid=(AIR,), buffer=1,
+def adapt(tree, values, refine_tol, coarsen_tol=None, fluid=(EMPTY,), buffer=1,
           min_level=0, max_level=None, max_cells=None, balance=26):
     """One split-and-merge pass. Returns (new_tree, values on new_tree).
 

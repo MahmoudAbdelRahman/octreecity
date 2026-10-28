@@ -2,8 +2,7 @@
 
 import numpy as np
 
-from .builder import GRASS, PAVEMENT, ROAD, WATER
-from .octree import AIR, BUILDING, GROUND, TREE
+from .urban import AIR, BUILDING, GRASS, GROUND, PAVEMENT, ROAD, TREE, WATER
 
 COLORS = {GROUND: "#8a7a62", BUILDING: "#c9ccd3", TREE: "#3f8a4a", WATER: "#3d7fc4",
           GRASS: "#86b35a", PAVEMENT: "#b7ad9c", ROAD: "#5d6066", AIR: "#0f1318"}

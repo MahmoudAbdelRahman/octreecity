@@ -14,10 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
-from .builder import GRASS, PAVEMENT, ROAD, WATER
-from .octree import AIR, GROUND
-
-GROUND_LIKE = (GROUND, WATER, GRASS, PAVEMENT, ROAD)
+from .urban import AIR, GROUND_LIKE
 
 
 def ground_level(city, labels=GROUND_LIKE):
@@ -34,7 +31,7 @@ def surface_height(city, transparent=(AIR,)):
 def street_points(city, every=1, height=1.5, exclude=None):
     """Points `height` m above ground on columns that are open to the sky
     at that height (not inside or under a building), every `every` columns."""
-    from .octree import BUILDING
+    from .urban import BUILDING
 
     exclude = [BUILDING] if exclude is None else exclude
     g = ground_level(city)

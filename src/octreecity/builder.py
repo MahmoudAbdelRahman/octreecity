@@ -17,11 +17,7 @@ import shapely
 from PIL import Image, ImageDraw
 
 from .columns import ColumnCity
-from .octree import AIR, BUILDING, GROUND, TREE
-
-WATER, GRASS, PAVEMENT, ROAD = 4, 5, 6, 7
-LABELS = {AIR: "air", GROUND: "ground", BUILDING: "building", TREE: "tree",
-          WATER: "water", GRASS: "grass", PAVEMENT: "pavement", ROAD: "road"}
+from .urban import CLASSES, AIR, BUILDING, GRASS, GROUND, LABELS, PAVEMENT, ROAD, TREE, WATER  # noqa: F401
 
 
 def rasterize(geoms, values, x0, y0, nx, ny, cell, fill=0.0, dtype=np.float32, line_width=None):
@@ -136,4 +132,5 @@ class CityBuilder:
             layers.append((bb, tt, lab))
         city = ColumnCity.from_layers((self.nx, self.ny, nz), layers, default=AIR,
                                       voxel_size=c, origin=(self.x0, self.y0, z0))
+        city.classes = CLASSES
         return city

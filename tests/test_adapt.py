@@ -1,6 +1,8 @@
 import numpy as np
 
-from octreecity import AIR, BUILDING, build_city
+from octreecity import build_city
+
+from octreecity.urban import AIR, BUILDING
 from octreecity.adapt import adapt, face_pairs, jump_indicator, sample, transfer
 
 

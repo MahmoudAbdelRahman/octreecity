@@ -1,33 +1,39 @@
-"""Linear (pointerless) octree for labelled city voxels.
+"""Linear (pointerless) octree: cells of any content, sized by that content.
 
-A city is a box of nx * ny * nz voxels of size h metres. Each voxel has a
-uint8 label (air, ground, building, tree, ... the meaning is up to the
-caller). The octree stores only leaves: cubes of side 2**level voxels,
-aligned to multiples of 2**level, that hold one label. Leaves are kept
-sorted by the Morton code of their min corner, so:
+A box of nx * ny * nz voxels of size h metres is tiled by cells: cubes of
+side 2**level voxels, aligned to multiples of 2**level. Only the leaves are
+stored, sorted by the Morton code of their min corner, so:
 
-    - in memory: 10 bytes per leaf (code 8, level 1, label 1),
-    - on disk: 2 bytes per leaf (level, label); codes are implied by order,
+    - structure costs 9 bytes per leaf in memory (code 8, level 1) and
+      1 byte on disk (codes are implied by the order),
     - point location is a binary search (np.searchsorted),
-    - any aligned cube is a contiguous slice of the leaf arrays.
+    - any aligned cube is a contiguous slice of the leaf arrays,
+    - the parent cells follow from the codes (parents()), not stored.
+
+Content per leaf (the cell table):
+    label    class id (uint8 or uint16), meaning set by `classes`
+             (0 = empty; see octreecity.classes, octreecity.urban)
+    cells    dict of static columns, each an array with one row per leaf
+             (any extra axes allowed: class shares, vectors, ...)
+    series   dict of dynamic columns (n_leaves, n_times), one value per
+             snapshot in `times`; the tree stays the same across snapshots
+
+Every change to the leaves (sorting, split, balance) moves all columns
+along; a split copies a leaf's row to its 8 children.
 
 The box does not need to be a cube: nx, ny, nz must be multiples of the
 root size 2**max_level, and the domain is tiled by several root cubes.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from scipy import ndimage
 
 from . import morton
+from .classes import EMPTY, Classes
 
 MIXED = 255
-
-AIR = 0
-GROUND = 1
-BUILDING = 2
-TREE = 3
 
 
 @dataclass
@@ -39,12 +45,32 @@ class LinearOctree:
     label: np.ndarray
     voxel_size: float = 1.0
     origin: tuple = (0.0, 0.0, 0.0)
+    classes: Classes = None
+    cells: dict = field(default_factory=dict)
+    series: dict = field(default_factory=dict)
+    times: np.ndarray = None
 
     def __post_init__(self):
-        order = np.argsort(self.code, kind="stable")
+        self.code = np.asarray(self.code, np.uint64)
+        n = self.code.size
+        lab = np.asarray(self.label)
+        lab = np.broadcast_to(lab, (n,)) if lab.ndim == 0 else lab
+        self.label = lab.astype(np.uint16 if lab.size and lab.max() > 254 else
+                                (lab.dtype if lab.dtype in (np.uint8, np.uint16) else np.uint8))
+        self.cells = {k: np.asarray(v) for k, v in self.cells.items()}
+        self.series = {k: np.asarray(v) for k, v in self.series.items()}
+        self.times = None if self.times is None else np.asarray(self.times)
+        for k, v in list(self.cells.items()) + list(self.series.items()):
+            if len(v) != n:
+                raise ValueError(f"column {k!r} has {len(v)} rows, expected {n}")
+        self._reorder(np.argsort(self.code, kind="stable"))
+
+    def _reorder(self, order):
         self.code = np.ascontiguousarray(self.code[order], dtype=np.uint64)
-        self.level = np.ascontiguousarray(self.level[order], dtype=np.uint8)
-        self.label = np.ascontiguousarray(self.label[order], dtype=np.uint8)
+        self.level = np.ascontiguousarray(np.asarray(self.level)[order], dtype=np.uint8)
+        self.label = np.ascontiguousarray(self.label[order])
+        self.cells = {k: v[order] for k, v in self.cells.items()}
+        self.series = {k: v[order] for k, v in self.series.items()}
 
     # ------------------------------------------------------------------ build
 
@@ -86,7 +112,7 @@ class LinearOctree:
     @classmethod
     def from_heightfield(cls, ground, surface, surface_label, nz, max_level,
                          voxel_size=1.0, origin=(0.0, 0.0, 0.0),
-                         air_label=AIR, ground_label=GROUND):
+                         air_label=EMPTY, ground_label=1):
         """Top-down build from 2.5D columns, without a dense grid.
 
         Per (x, y) column, heights in voxel units: ground for z < ground,
@@ -166,7 +192,7 @@ class LinearOctree:
         return self.label[self.locate(x, y, z)]
 
     def to_dense(self):
-        grid = np.empty(self.shape, np.uint8)
+        grid = np.empty(self.shape, self.label.dtype)
         x, y, z = self.corners()
         for lv in np.unique(self.level):
             s = 1 << int(lv)
@@ -179,6 +205,50 @@ class LinearOctree:
 
     def level_histogram(self):
         return np.bincount(self.level, minlength=self.max_level + 1)
+
+    def centers(self):
+        """Centre of every leaf in metres, (n, 3)."""
+        x, y, z = self.corners()
+        c = 0.5 * self.sizes()
+        h = self.voxel_size
+        return np.stack([o + h * (v + c) for o, v in zip(self.origin, (x, y, z))], 1)
+
+    def sizes_m(self):
+        return self.sizes() * float(self.voxel_size)
+
+    # ------------------------------------------------------------- cell table
+
+    def add_snapshot(self, time, **values):
+        """Append one snapshot of dynamic values (one row per leaf each),
+        e.g. tree.add_snapshot("08:00", temperature=t8, wind=w8)."""
+        self.times = np.array([time]) if self.times is None else np.append(self.times, time)
+        nt = len(self.times)
+        for k, v in values.items():
+            v = np.asarray(v, np.float64 if np.asarray(v).dtype.kind != "f" else None)
+            if v.shape != (self.n_leaves,):
+                raise ValueError(f"{k!r}: expected {self.n_leaves} values")
+            old = self.series.get(k, np.full((self.n_leaves, nt - 1), np.nan, v.dtype))
+            self.series[k] = np.concatenate([old, v[:, None]], 1)
+        for k in self.series:
+            if self.series[k].shape[1] < nt:
+                pad = np.full((self.n_leaves, nt - self.series[k].shape[1]), np.nan)
+                self.series[k] = np.concatenate([self.series[k], pad], 1)
+        return self
+
+    def class_names(self):
+        """Name of each leaf's class (needs `classes`)."""
+        if self.classes is None:
+            raise ValueError("this tree has no classes; set tree.classes")
+        return np.array(self.classes.names)[self.label]
+
+    def parents(self, levels_above=0):
+        """The internal cells above the leaves (see Parents).
+
+        levels_above > 0 adds that many levels above the root cubes, grouping
+        2 x 2 x 2 roots (or fewer at the box edge) per step, up to one cell
+        for the whole box when enough levels are added.
+        """
+        return Parents.of(self, levels_above)
 
     def check(self):
         """Leaves are aligned, inside the box, and tile it with no gap or overlap."""
@@ -203,10 +273,13 @@ class LinearOctree:
         lv = self.level[mask].astype(np.int64) - 1
         cx, cy, cz = _children(x[mask], y[mask], z[mask], scale=np.left_shift(1, lv))
         keep = ~mask
+        take = np.concatenate([np.nonzero(keep)[0], np.repeat(np.nonzero(mask)[0], 8)])
         self.code = np.concatenate([self.code[keep], morton.encode(cx, cy, cz)])
         self.level = np.concatenate([self.level[keep], np.repeat(lv, 8).astype(np.uint8)])
-        self.label = np.concatenate([self.label[keep], np.repeat(self.label[mask], 8)])
-        self.__post_init__()
+        self.label = self.label[take]
+        self.cells = {k: v[take] for k, v in self.cells.items()}
+        self.series = {k: v[take] for k, v in self.series.items()}
+        self._reorder(np.argsort(self.code, kind="stable"))
         return self
 
     def refine_where(self, predicate, min_level=0, max_iter=64):
@@ -324,28 +397,169 @@ class LinearOctree:
         off = np.concatenate([[np.uint64(0)], np.cumsum(span)[:-1]]).astype(np.uint64)
         root = np.uint64(1) << np.uint64(3 * max_level)
         t = cls(tuple(shape), max_level, np.zeros(level.size, np.uint64), level,
-                np.asarray(label, np.uint8), voxel_size, tuple(origin))
+                np.asarray(label), voxel_size, tuple(origin))
         t.code = t.root_codes()[(off // root).astype(np.int64)] + off % root
         return t
 
     def save(self, path):
+        """Compressed .npz: structure as (level, label) per leaf, plus the
+        cell table, the snapshots and the class names."""
         level, label = self.to_compact()
+        extra = {f"cell__{k}": v for k, v in self.cells.items()}
+        extra.update({f"series__{k}": v for k, v in self.series.items()})
+        if self.times is not None:
+            extra["times"] = self.times
+        if self.classes is not None:
+            extra["class_names"], extra["class_parent"] = self.classes.to_arrays()
         np.savez_compressed(path, shape=np.array(self.shape), max_level=self.max_level,
                             level=level, label=label, voxel_size=self.voxel_size,
-                            origin=np.array(self.origin))
+                            origin=np.array(self.origin), **extra)
 
     @classmethod
     def load(cls, path):
-        d = np.load(path)
-        return cls.from_compact(tuple(int(v) for v in d["shape"]), int(d["max_level"]),
-                                d["level"], d["label"], float(d["voxel_size"]),
-                                tuple(float(v) for v in d["origin"]))
+        d = np.load(path, allow_pickle=False)
+        t = cls.from_compact(tuple(int(v) for v in d["shape"]), int(d["max_level"]),
+                             d["level"], d["label"], float(d["voxel_size"]),
+                             tuple(float(v) for v in d["origin"]))
+        # from_compact builds leaves already in Morton order: columns line up
+        t.cells = {k[6:]: d[k] for k in d.files if k.startswith("cell__")}
+        t.series = {k[8:]: d[k] for k in d.files if k.startswith("series__")}
+        t.times = d["times"] if "times" in d.files else None
+        if "class_names" in d.files:
+            t.classes = Classes.from_arrays(d["class_names"], d["class_parent"])
+        return t
+
+
+# ------------------------------------------------------------------- parents
+
+@dataclass
+class Parents:
+    """Internal cells of a LinearOctree: every cube that holds smaller leaves.
+
+    code, level     Morton code (min corner) and level of each internal cell,
+                    sorted by level, then code
+    leaf_parent     per leaf, index of its direct parent (-1 for a leaf that
+                    is a root cube)
+    node_parent     per internal cell, index of its parent (-1 at the top)
+
+    Leaves under an internal cell are a contiguous run of the tree's leaves
+    (leaf_range), so summaries over parents are cheap (reduce).
+    """
+    tree: "LinearOctree"
+    code: np.ndarray
+    level: np.ndarray
+    leaf_parent: np.ndarray
+    node_parent: np.ndarray
+
+    @classmethod
+    def of(cls, tree, levels_above=0):
+        top = tree.max_level + int(levels_above)
+        if top > morton.MAX_BITS:
+            raise ValueError("too many levels above the roots")
+        codes, levels = [], []
+        for lv in range(int(tree.level.min()) + 1 if tree.n_leaves else 1, top + 1):
+            below = tree.level < lv
+            if not below.any():
+                continue
+            c = np.unique(_mask(tree.code[below], lv))
+            codes.append(c)
+            levels.append(np.full(c.size, lv, np.uint8))
+        code = np.concatenate(codes) if codes else np.zeros(0, np.uint64)
+        level = np.concatenate(levels) if levels else np.zeros(0, np.uint8)
+        p = cls(tree, code, level, np.full(tree.n_leaves, -1), np.full(code.size, -1))
+        p.leaf_parent = p.find(tree.code, tree.level.astype(np.int64) + 1)
+        p.node_parent = p.find(code, level.astype(np.int64) + 1)
+        return p
+
+    def find(self, codes, levels):
+        """Index of the internal cell at `levels` containing each code (-1 if none)."""
+        codes = np.asarray(codes, np.uint64)
+        levels = np.broadcast_to(np.asarray(levels, np.int64), codes.shape)
+        out = np.full(codes.size, -1, np.int64)
+        for lv in np.unique(levels):
+            m = levels == lv
+            sel = np.nonzero(self.level == lv)[0]
+            if not sel.size:
+                continue
+            want = _mask(codes[m], int(lv))
+            k = np.searchsorted(self.code[sel], want)
+            k = np.minimum(k, sel.size - 1)
+            hit = self.code[sel][k] == want
+            out[np.nonzero(m)[0][hit]] = sel[k[hit]]
+        return out
+
+    def __len__(self):
+        return self.code.size
+
+    def corners(self):
+        return morton.decode(self.code)
+
+    def sizes(self):
+        return np.left_shift(1, self.level.astype(np.int64))
+
+    def centers(self):
+        t = self.tree
+        x, y, z = self.corners()
+        c = 0.5 * self.sizes()
+        return np.stack([o + t.voxel_size * (v + c) for o, v in zip(t.origin, (x, y, z))], 1)
+
+    def leaf_range(self):
+        """[lo, hi) leaf indices under each internal cell."""
+        span = np.left_shift(np.uint64(1), 3 * self.level.astype(np.uint64))
+        lo = np.searchsorted(self.tree.code, self.code)
+        hi = np.searchsorted(self.tree.code, self.code + span)
+        return lo, hi
+
+    def ancestors(self):
+        """(n_leaves, depth) table of ancestor indices, nearest first, -1 padded."""
+        chain = [self.leaf_parent]
+        while (chain[-1] >= 0).any():
+            nxt = np.where(chain[-1] >= 0, self.node_parent[np.maximum(chain[-1], 0)], -1)
+            chain.append(nxt)
+        return np.stack(chain[:-1], 1) if len(chain) > 1 else np.zeros((self.tree.n_leaves, 0), int)
+
+    def reduce(self, values, how="mean", weight="volume"):
+        """Summary of a leaf column over each internal cell.
+
+        how: mean (weighted by leaf volume, or by `weight` per leaf; NaN
+        values are skipped), sum, min, max. values may have extra axes
+        (e.g. class shares (n, C)).
+        """
+        v = np.asarray(values, np.float64)
+        lo, hi = self.leaf_range()
+        if how in ("min", "max"):
+            f = np.fmin if how == "min" else np.fmax
+            out = np.full((len(lo),) + v.shape[1:], np.nan)
+            vp = np.concatenate([v, np.full((1,) + v.shape[1:], np.nan)])
+            for lv in np.unique(self.level):        # same-level ranges never overlap
+                m = np.nonzero(self.level == lv)[0]
+                idx = np.stack([lo[m], hi[m]], 1).ravel()
+                out[m] = f.reduceat(vp, idx, axis=0)[::2]
+            return out
+        w = (self.tree.sizes().astype(np.float64) ** 3 if isinstance(weight, str)
+             else np.asarray(weight, np.float64))
+        w = w.reshape((-1,) + (1,) * (v.ndim - 1))
+        ok = np.isfinite(v)
+        cs = np.concatenate([np.zeros((1,) + v.shape[1:]), np.cumsum(np.where(ok, v * (w if how == "mean" else 1), 0), 0)])
+        tot = cs[hi] - cs[lo]
+        if how == "sum":
+            return tot
+        cw = np.concatenate([np.zeros((1,) + v.shape[1:]), np.cumsum(np.where(ok, w, 0) + 0 * v, 0)])
+        den = cw[hi] - cw[lo]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            return np.where(den > 0, tot / den, np.nan)
+
+
+def _mask(code, level):
+    """Morton code of the aligned cube of `level` that contains each code."""
+    keep = ~np.uint64((1 << (3 * int(level))) - 1) if 3 * int(level) < 64 else np.uint64(0)
+    return np.asarray(code, np.uint64) & keep
 
 
 # ------------------------------------------------------------------- helpers
 
 def rasterize_columns(ground, surface, surface_label, nz,
-                      air_label=AIR, ground_label=GROUND):
+                      air_label=EMPTY, ground_label=1):
     """Dense label grid from 2.5D columns (same rule as from_heightfield)."""
     ground = np.asarray(ground, np.float64)[..., None]
     surface = np.maximum(np.asarray(surface, np.float64)[..., None], ground)

@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 
 from octreecity import morton
-from octreecity.octree import (AIR, BUILDING, GROUND, LinearOctree,
-                               rasterize_columns)
+from octreecity.octree import LinearOctree, rasterize_columns
+from octreecity.urban import AIR, BUILDING, GROUND
 
 
 def random_city(seed=0, n=64, nz=64):

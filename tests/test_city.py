@@ -1,7 +1,9 @@
 import numpy as np
 import pytest
 
-from octreecity import BUILDING, build_city
+from octreecity import build_city
+
+from octreecity.urban import BUILDING
 
 
 def heights(n=100, seed=0):

@@ -1,6 +1,8 @@
 import numpy as np
 
-from octreecity import BUILDING, rasterize_columns
+from octreecity import rasterize_columns
+
+from octreecity.urban import BUILDING
 from octreecity.columns import ColumnCity
 from octreecity.tiles import TiledCity, TiledCityWriter
 

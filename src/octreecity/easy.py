@@ -19,7 +19,10 @@ from pathlib import Path
 import numpy as np
 import shapely
 
-from .builder import GRASS, PAVEMENT, ROAD, WATER, CityBuilder
+from . import urban
+from .builder import CityBuilder
+
+from .urban import GRASS, PAVEMENT, ROAD, WATER
 from .sources import Features, read_osm_overpass
 
 OVERPASS = ["https://overpass-api.de/api/interpreter",

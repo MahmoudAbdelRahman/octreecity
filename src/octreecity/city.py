@@ -4,7 +4,9 @@ import math
 
 import numpy as np
 
-from .octree import AIR, BUILDING, GROUND, LinearOctree, pad_to_multiple
+from .octree import LinearOctree, pad_to_multiple
+
+from .urban import AIR, BUILDING, GROUND
 
 
 def build_city(height, pixel_size, min_cell, max_cell, ground=None,

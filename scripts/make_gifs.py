@@ -133,7 +133,7 @@ def orbit():
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
     from octreecity.exports import surface_quads
-    from octreecity.octree import BUILDING
+    from octreecity.urban import BUILDING
     from octreecity.tiles import TiledCity
 
     c = TiledCity(ROOT / "data/osaka_1m.ocz").region(41, 47, 43, 49)

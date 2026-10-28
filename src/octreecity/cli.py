@@ -186,7 +186,8 @@ def main(argv=None):
         print(f"{n:,} faces -> {a.out or 'city.obj'}")
     elif a.cmd == "foam":
         from .foam import build_polymesh, check_polymesh, write_polymesh
-        from .octree import AIR, pad_to_multiple
+        from .octree import pad_to_multiple
+        from .urban import AIR
 
         city = _load_city(a)
         L = int(round(np.log2(a.max_cell / city.voxel_size)))

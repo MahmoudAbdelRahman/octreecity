@@ -3,8 +3,10 @@ import gzip
 import numpy as np
 import shapely
 
-from octreecity.builder import GRASS, ROAD, CityBuilder, rasterize
-from octreecity.octree import AIR, BUILDING, GROUND, TREE
+from octreecity.builder import CityBuilder, rasterize
+
+from octreecity.urban import GRASS, ROAD
+from octreecity.urban import AIR, BUILDING, GROUND, TREE
 from octreecity.sources import Features, read_citygml
 
 

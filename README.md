@@ -195,6 +195,28 @@ Every cell keeps a label (ground, building, tree, water, grass, road ... or
 your own classes), and any dense voxel grid can be converted in and out
 exactly.
 
+**For learning, the core is general.** Any data that can say "what is inside
+this box" (height maps, voxel grids, point clouds, your own source) builds a
+tree by any split rule you give, over classes (at any depth of your own class
+tree) or attributes. Cells carry a table of values and snapshots over time,
+links say which cells relate to which (neighbours and parents built in), and
+everything exports as arrays ready for PyTorch:
+
+```python
+from octreecity.build import build
+from octreecity.rules import mixed, varies
+from octreecity.sources import ColumnSource
+from octreecity.links import neighbours, hierarchy
+from octreecity.learn import tokens
+
+src = ColumnSource(city, attrs={"height": heights})        # a value per column
+tree = build(src, mixed() | varies("height", 3.0), max_level=5)
+p = tree.parents()
+tok = tokens(tree, ["size_m"], neighbours(tree) | hierarchy(tree, p), parents=p, k=16)
+```
+
+See [cells for learning](docs/explanation/cells-for-learning.md).
+
 *The animation under "Simulation grids" shows the idea on a simulated wind
 field: start coarse, split where neighbouring values differ, merge where they
 agree, repeat.*

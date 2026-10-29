@@ -61,7 +61,8 @@ class Boxes:
     def n_classes(self, depth=None, ignore=()):
         c = self.counts(depth)
         keep = np.ones(c.shape[1], bool)
-        keep[list(ignore)] = False
+        ids = [self.classes.id(i) if isinstance(i, str) else int(i) for i in ignore]
+        keep[ids] = False
         return (c[:, keep] > 0).sum(1)
 
     def share(self, depth=None):
@@ -137,8 +138,8 @@ class mixed(Rule):
     """Split boxes that hold more than one class (empty counts as a class).
 
     depth: look at the class tree at this depth (None = the classes as
-    given). ignore: classes that do not count (e.g. a class that may mix
-    freely with others). This is plain occupancy when there are only
+    given). ignore: classes (ids or names) that do not count (e.g. a class
+    that may mix freely with others). This is plain occupancy when there are only
     'empty' and one solid class.
     """
 

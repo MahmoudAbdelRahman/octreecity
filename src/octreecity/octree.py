@@ -553,7 +553,7 @@ class Parents:
         tot = cs[hi] - cs[lo]
         if how == "sum":
             return tot
-        cw = np.concatenate([np.zeros((1,) + v.shape[1:]), np.cumsum(np.where(ok, w, 0) + 0 * v, 0)])
+        cw = np.concatenate([np.zeros((1,) + v.shape[1:]), np.cumsum(np.where(ok, np.broadcast_to(w, v.shape), 0), 0)])
         den = cw[hi] - cw[lo]
         with np.errstate(invalid="ignore", divide="ignore"):
             return np.where(den > 0, tot / den, np.nan)

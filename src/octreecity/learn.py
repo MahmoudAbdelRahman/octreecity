@@ -58,8 +58,10 @@ class Tokens:
         """One batch from several token sets (key ids shifted; key tables
         padded to the widest)."""
         parts = list(parts)
-        if any(p.kinds != parts[0].kinds or p.feature_names != parts[0].feature_names for p in parts):
-            raise ValueError("token sets differ in link kinds or features")
+        p0 = parts[0]
+        if any(p.kinds != p0.kinds or p.feature_names != p0.feature_names or p.target_names != p0.target_names
+               or (p.targets is None) != (p0.targets is None) for p in parts):
+            raise ValueError("token sets differ in link kinds, features or targets")
         K = max(p.idx.shape[1] for p in parts)
         out, base = {k: [] for k in Tokens._ARRAYS}, 0
         for p in parts:
@@ -227,9 +229,10 @@ def pixel_map(tree, select, pixel=1, shape=None):
     for k in np.unique(w)[::-1]:                            # small cells drawn last
         m = w == k
         r = np.arange(k)
-        xs = np.minimum(x[m][:, None] // pixel + r, X - 1)
-        ys = np.minimum(y[m][:, None] // pixel + r, Y - 1)
-        out[xs[:, :, None], ys[:, None, :]] = tok[m][:, None, None]
+        xs, ys = x[m][:, None] // pixel + r, y[m][:, None] // pixel + r
+        ok = (xs < X)[:, :, None] & (ys < Y)[:, None, :]
+        b = np.broadcast_to(tok[m][:, None, None], ok.shape)
+        out[np.broadcast_to(xs[:, :, None], ok.shape)[ok], np.broadcast_to(ys[:, None, :], ok.shape)[ok]] = b[ok]
     return out
 
 

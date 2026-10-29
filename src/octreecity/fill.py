@@ -71,13 +71,14 @@ def from_raster(tree, raster, how="mean", pixel=1):
         fill = np.inf if how == "min" else -np.inf
         f = ndimage.minimum_filter if how == "min" else ndimage.maximum_filter
         rr = np.where(ok, r, fill)
-        w = x1 - x0
-        for k in np.unique(w):                          # one filter per footprint width
-            m = (w == k) & (cx1 > cx0) & (cy1 > cy0)
+        wx, wy = x1 - x0, y1 - y0
+        for kx, ky in np.unique(np.stack([wx, wy], 1), axis=0):     # one filter per footprint shape
+            m = (wx == kx) & (wy == ky) & (cx1 > cx0) & (cy1 > cy0)
             if not m.any():
                 continue
             # window [i, i + k) for output i
-            v = f(rr, size=int(k), origin=-(int(k) // 2), mode="constant", cval=fill)
+            v = f(rr, size=(int(kx), int(ky)), origin=(-(int(kx) // 2), -(int(ky) // 2)),
+                  mode="constant", cval=fill)
             out[m] = v[cx0[m], cy0[m]]
         out[~np.isfinite(out)] = np.nan
         return out

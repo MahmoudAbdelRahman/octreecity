@@ -52,7 +52,8 @@ def transfer(old, old_values, new):
 
     A new leaf inside an old leaf takes its value (prolongation); a new leaf
     covering several old leaves takes their volume-weighted mean
-    (restriction), so the volume integral is kept.
+    (restriction), so the volume integral is kept. NaN values are skipped
+    (NaN only where all covered old leaves are NaN).
     """
     span = np.left_shift(np.uint64(1), 3 * new.level.astype(np.uint64))
     lo = np.searchsorted(old.code, new.code, side="right") - 1
@@ -61,15 +62,20 @@ def transfer(old, old_values, new):
     many = hi - lo > 1
     if many.any():
         vol = old.sizes().astype(np.float64) ** 3
-        w = np.concatenate([[0.0], np.cumsum(old_values * vol)])
-        v = np.concatenate([[0.0], np.cumsum(vol)])
-        out[many] = (w[hi[many]] - w[lo[many]]) / (v[hi[many]] - v[lo[many]])
+        ok = np.isfinite(old_values)
+        w = np.concatenate([[0.0], np.cumsum(np.where(ok, old_values * vol, 0.0))])
+        v = np.concatenate([[0.0], np.cumsum(np.where(ok, vol, 0.0))])
+        den = v[hi[many]] - v[lo[many]]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            out[many] = np.where(den > 0, (w[hi[many]] - w[lo[many]]) / den, np.nan)
     return out
 
 
 def adapt(tree, values, refine_tol, coarsen_tol=None, fluid=(EMPTY,), buffer=1,
           min_level=0, max_level=None, max_cells=None, balance=26):
     """One split-and-merge pass. Returns (new_tree, values on new_tree).
+    The new tree keeps the classes; move other cell columns with
+    octreecity.fill.carry(tree, new_tree).
 
     min_level / max_level: cell size limits as levels (cell = 2**level
     voxels of tree.voxel_size metres); default the tree's own limits.
@@ -155,4 +161,4 @@ def _apply(tree, split, merge_first):
         labels.append(tree.label[merge_first])
     return LinearOctree(tree.shape, tree.max_level, np.concatenate(codes),
                         np.concatenate(levels), np.concatenate(labels),
-                        tree.voxel_size, tree.origin)
+                        tree.voxel_size, tree.origin, classes=tree.classes)

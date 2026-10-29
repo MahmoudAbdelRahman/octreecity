@@ -31,7 +31,8 @@ import numpy as np
 
 from . import morton
 from .classes import EMPTY
-from .features import Features, read_citygml, read_geojson, read_osm_overpass, reproject  # noqa: F401
+from .features import (Features, Surfaces, read_citygml, read_citygml_surfaces,  # noqa: F401
+                       read_geojson, read_osm_overpass, reproject)
 
 CHUNK = 1 << 22          # voxels (or column-run pairs) handled at once
 
@@ -106,6 +107,28 @@ def _stats(box, w, v, n):
     return out
 
 
+def _check_labels(labels, n_classes):
+    if labels.size and (labels.min() < 0 or labels.max() >= n_classes):
+        raise ValueError(f"class ids must be in 0 .. {n_classes - 1} (the classes given); "
+                         f"found {int(labels.min())} .. {int(labels.max())}")
+
+
+def _merge8(kids, n, size):
+    """Summaries of n boxes from the summaries of their 8 children each (in
+    order: box 0's 8 children first)."""
+    c = kids.counts.reshape(n, 8, -1).sum(1)
+    st = {}
+    for k, v in kids.stats.items():
+        v = v.reshape(n, 8, 5)
+        out = np.empty((n, 5))
+        out[:, :3] = v[:, :, :3].sum(1)
+        with np.errstate(invalid="ignore"):
+            out[:, 3] = np.fmin.reduce(v[:, :, 3], 1)
+            out[:, 4] = np.fmax.reduce(v[:, :, 4], 1)
+        st[k] = out
+    return Summary(np.full(n, float(size) ** 3), c, st)
+
+
 class Source:
     """Base class: set shape, voxel_size, origin, classes (optional),
     attributes (names) and implement summarize."""
@@ -139,10 +162,17 @@ class GridSource(Source):
         self.voxel_size, self.origin, self.classes = float(voxel_size), tuple(origin), classes
         self.attributes = tuple(self.attrs)
         self.n_classes = len(classes) if classes is not None else int(self.labels.max()) + 1
+        _check_labels(self.labels, self.n_classes)
 
     def summarize(self, x, y, z, size):
         x, y, z = (np.asarray(v, np.int64) for v in (x, y, z))
         s = int(size)
+        if s ** 3 > CHUNK and len(x):                 # very big boxes: add up their 8 children
+            h = s // 2
+            off = np.array([[i, j, k] for k in (0, 1) for j in (0, 1) for i in (0, 1)]) * h
+            kids = self.summarize((x[:, None] + off[:, 0]).ravel(), (y[:, None] + off[:, 1]).ravel(),
+                                  (z[:, None] + off[:, 2]).ravel(), h)
+            return _merge8(kids, len(x), s)
         per = max(1, CHUNK // s ** 3)
         parts = []
         for i in range(0, len(x), per):
@@ -183,6 +213,7 @@ class ColumnSource(Source):
         self.classes = classes if classes is not None else getattr(city, "classes", None)
         self.attributes = tuple(self.attrs)
         self.n_classes = len(self.classes) if self.classes is not None else int(city.label.max()) + 1
+        _check_labels(np.asarray(city.label), self.n_classes)
         self._bottom = city.bottoms().astype(np.int64)
 
     def summarize(self, x, y, z, size):
@@ -243,6 +274,7 @@ class SparseSource(Source):
         self.shape = tuple(int(v) for v in (shape or (x.max() + 1, y.max() + 1, z.max() + 1)))
         self.voxel_size, self.origin, self.classes = float(voxel_size), tuple(origin), classes
         self.n_classes = len(classes) if classes is not None else int(self.labels.max()) + 1
+        _check_labels(self.labels, self.n_classes)
         self.by_class = [self.code[self.labels == k] for k in range(self.n_classes)]
         self.attrs = {}
         for k, v in (attrs or {}).items():
@@ -284,6 +316,23 @@ class SparseSource(Source):
         vx, vy, vz = morton.decode(pcode[win])
         return cls(vx, vy, vz, plab[win], out_attrs, shape, voxel_size, tuple(origin), classes)
 
+    @classmethod
+    def from_surfaces(cls, polygons, labels, voxel_size, origin=None, attrs=None, shape=None,
+                      classes=None, spacing=None):
+        """Voxelise 3D polygons (CityGML surfaces, mesh faces): each polygon
+        is sampled on a grid of `spacing` (default half a voxel) in its own
+        plane, then as from_points. labels / attrs: one value per polygon.
+        Like a point cloud, this marks the surfaces; insides stay empty."""
+        sp = voxel_size / 2 if spacing is None else float(spacing)
+        pts, owner = [], []
+        for k, ring in enumerate(polygons):
+            q = _sample_polygon(np.asarray(ring, np.float64), sp)
+            pts.append(q)
+            owner.append(np.full(len(q), k))
+        pts, owner = np.concatenate(pts), np.concatenate(owner)
+        a = {n: np.asarray(v, np.float64)[owner] for n, v in (attrs or {}).items()}
+        return cls.from_points(pts, np.asarray(labels)[owner], voxel_size, origin, a, shape, classes)
+
     def summarize(self, x, y, z, size):
         x, y, z = (np.asarray(v, np.int64) for v in (x, y, z))
         s = int(size)
@@ -303,3 +352,32 @@ class SparseSource(Source):
             st[st[:, 0] == 0, 3:] = np.nan
             out.stats[k] = st
         return self._fill_empty(out, s)
+
+
+def _sample_polygon(ring, sp):
+    """Points every `sp` metres inside a planar 3D polygon (its corners if
+    it is too small to hold any)."""
+    import shapely
+
+    if len(ring) > 1 and np.allclose(ring[0], ring[-1]):
+        ring = ring[:-1]
+    if len(ring) < 3:
+        return ring
+    c = ring.mean(0)
+    n = np.cross(ring - c, np.roll(ring, -1, 0) - c).sum(0)        # Newell normal
+    if not np.any(n):
+        return ring
+    w = int(np.argmax(np.abs(n)))
+    u, v = [a for a in range(3) if a != w]
+    poly = shapely.Polygon(ring[:, [u, v]])
+    if not poly.is_valid:
+        poly = shapely.make_valid(poly)
+    x0, y0, x1, y1 = poly.bounds
+    gu, gv = np.meshgrid(np.arange(x0 + sp / 2, x1, sp), np.arange(y0 + sp / 2, y1, sp), indexing="ij")
+    gu, gv = gu.ravel(), gv.ravel()
+    inside = shapely.contains_xy(poly, gu, gv)
+    gu, gv = gu[inside], gv[inside]
+    out = np.empty((gu.size, 3))
+    out[:, u], out[:, v] = gu, gv
+    out[:, w] = c[w] - (n[u] * (gu - c[u]) + n[v] * (gv - c[v])) / n[w]
+    return out if len(out) else ring                  # a polygon smaller than the spacing: its corners

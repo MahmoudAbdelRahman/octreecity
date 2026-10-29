@@ -26,6 +26,7 @@ templates.
 | `demo_kaist.py` | KAIST campus from V-World CityGML + OpenStreetMap | V-World CityGML; OSM download |
 | `demo_analysis.py` | sky view factor and winter sun hours for a block | a tiled city |
 | `demo_voids.py` | surface vs exact rays under tree canopies | `data/kaist_1400m_1m.npz` (from `demo_kaist.py`) |
+| `demo_lod2.py` | LoD2 CityGML walls, roofs and ground surfaces as classes of a class tree; cells by semantic depth and per building | a CityGML file with LoD2 surfaces (V-World KAIST tile) |
 | `demo_adapt_sun.py` | `adapt()` following 3D sun hours over Osaka | `data/osaka_1m.ocz` |
 | `bench_formats.py` | storage benchmark: columns vs octree vs dense | Osaka height tiles (urban_wind) |
 | `check_paper_cells.py` | checks the library rebuilds the paper's cells and parent-link graph exactly | paper-code `geo_oct.pkl`, Daejeon height pictures (urban_wind) |

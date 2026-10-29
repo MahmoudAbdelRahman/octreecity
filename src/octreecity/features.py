@@ -183,3 +183,74 @@ def read_osm_overpass(json_data, crs_to):
     geoms = reproject(np.array(geoms, dtype=object), 4326, crs_to)
     h = np.array([_height_from_tags(t) for t in tags])
     return Features(geoms, h, attrs={"tags": np.array(tags, dtype=object)})
+
+
+@dataclass
+class Surfaces:
+    """3D polygons of city objects, with the kind of surface each one is.
+
+    polygons    list of (k, 3) arrays (exterior rings, metres, file CRS)
+    kind        name of the surface element each polygon sits in, e.g.
+                "WallSurface", "RoofSurface", "GroundSurface" (LoD2+), or the
+                geometry property for objects without them, e.g. "lod1Solid"
+    obj         index of the object (building) each polygon belongs to
+    objects     per object: {"id": gml id, attribute name: value, ...}
+    """
+    polygons: list
+    kind: np.ndarray
+    obj: np.ndarray
+    objects: list
+
+    def __len__(self):
+        return len(self.polygons)
+
+
+def read_citygml_surfaces(path, tag="Building"):
+    """3D surfaces of every `tag` object in a CityGML file (any LoD), with
+    their semantic kind (wall, roof, ground ... as named in the file) and
+    the object's attributes (gen:*Attribute values, measuredHeight).
+    Turn them into voxels with octreecity.sources.SparseSource.from_surfaces."""
+    from lxml import etree
+
+    opener = gzip.open if str(path).endswith(".gz") else open
+    polys, kinds, objs, objects = [], [], [], []
+    with opener(path, "rb") as f:
+        for _, el in etree.iterparse(f, events=("end",), tag=f"{{*}}{tag}", huge_tree=True):
+            attrs = {"id": el.get(f"{{{GML}}}id", "")}
+            for a in el.iter("{*}stringAttribute", "{*}intAttribute", "{*}doubleAttribute"):
+                v = a.find("{*}value")
+                if v is not None and a.get("name"):
+                    t = etree.QName(a).localname
+                    attrs[a.get("name")] = (float(v.text) if t != "stringAttribute" else v.text)
+            mh = el.find("{*}measuredHeight")
+            if mh is not None:
+                try:
+                    attrs["measuredHeight"] = float(mh.text)
+                except (TypeError, ValueError):
+                    pass
+            n = 0
+            for pl in el.iter(f"{{{GML}}}posList"):
+                dim = int(pl.get("srsDimension", 3))
+                v = np.array(pl.text.split(), float)
+                if dim != 3 or v.size < 9:
+                    continue
+                kind, p = None, pl.getparent()
+                while p is not None and p is not el:
+                    name = etree.QName(p).localname
+                    if (name.endswith("Surface") and not name.startswith("lod")
+                            and name not in ("MultiSurface", "CompositeSurface", "OrientableSurface")):
+                        kind = name
+                        break
+                    if kind is None and name.startswith("lod"):
+                        kind = name
+                    p = p.getparent()
+                polys.append(v.reshape(-1, 3))
+                kinds.append(kind or "surface")
+                objs.append(len(objects))
+                n += 1
+            if n:
+                objects.append(attrs)
+            el.clear()
+            while el.getprevious() is not None:
+                del el.getparent()[0]
+    return Surfaces(polys, np.array(kinds), np.array(objs, np.int64), objects)

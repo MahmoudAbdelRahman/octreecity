@@ -89,3 +89,30 @@ def test_points_majority_class():
     s = src.summarize([0], [0], [0], 4)
     assert s.counts[0, 2] == 1 and s.counts[0, 3] == 1 and s.counts[0, 0] == 62
     assert s.mean("i")[0] == pytest.approx((3.0 + 7.0) / 2)
+
+
+def test_citygml_surfaces_and_from_surfaces(tmp_path):
+    from octreecity.features import read_citygml_surfaces
+
+    xml = """<?xml version="1.0"?>
+<core:CityModel xmlns:core="http://www.opengis.net/citygml/2.0" xmlns:bldg="http://www.opengis.net/citygml/building/2.0"
+ xmlns:gml="http://www.opengis.net/gml" xmlns:gen="http://www.opengis.net/citygml/generics/2.0">
+<core:cityObjectMember><bldg:Building gml:id="b1"><gen:doubleAttribute name="year"><gen:value>1999</gen:value></gen:doubleAttribute>
+<bldg:measuredHeight>4</bldg:measuredHeight>
+<bldg:boundedBy><bldg:RoofSurface><bldg:lod2MultiSurface><gml:MultiSurface><gml:surfaceMember><gml:Polygon><gml:exterior><gml:LinearRing>
+<gml:posList srsDimension="3">0 0 4 4 0 4 4 4 4 0 4 4 0 0 4</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></gml:surfaceMember></gml:MultiSurface></bldg:lod2MultiSurface></bldg:RoofSurface></bldg:boundedBy>
+<bldg:boundedBy><bldg:WallSurface><bldg:lod2MultiSurface><gml:MultiSurface><gml:surfaceMember><gml:Polygon><gml:exterior><gml:LinearRing>
+<gml:posList srsDimension="3">0 0 0 4 0 0 4 0 4 0 0 4 0 0 0</gml:posList></gml:LinearRing></gml:exterior></gml:Polygon></gml:surfaceMember></gml:MultiSurface></bldg:lod2MultiSurface></bldg:WallSurface></bldg:boundedBy>
+</bldg:Building></core:cityObjectMember></core:CityModel>"""
+    p = tmp_path / "b.gml"
+    p.write_text(xml)
+    s = read_citygml_surfaces(p)
+    assert list(s.kind) == ["RoofSurface", "WallSurface"] and s.objects[0]["year"] == 1999.0
+    assert s.objects[0]["measuredHeight"] == 4.0 and s.objects[0]["id"] == "b1"
+    c = Classes.from_tree({"building": {"RoofSurface": {}, "WallSurface": {}}})
+    src = SparseSource.from_surfaces(s.polygons, c.ids(s.kind), 1.0, origin=(0, 0, 0), shape=(8, 8, 8), classes=c)
+    counts = np.bincount(src.labels, minlength=len(c))
+    assert counts[c.id("RoofSurface")] == 16                 # the 4 x 4 roof at z = 4 fills one voxel layer
+    assert counts[c.id("WallSurface")] == 16                 # the wall at y = 0, 4 m x 4 m
+    t = build(src, mixed(depth=1), 3, label_depth=1)
+    assert set(np.unique(t.label)) == {0, c.id("RoofSurface"), c.id("WallSurface")}

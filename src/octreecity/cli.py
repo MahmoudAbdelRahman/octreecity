@@ -48,7 +48,12 @@ def _load_city(a):
         if not a.region:
             sys.exit("a tiled city needs --region i0 j0 i1 j1")
         return TiledCity(a.city).region(*a.region)
-    return ColumnCity.load(a.city)
+    city = ColumnCity.load(a.city)
+    if a.region:                                  # columns i0 j0 i1 j1 of a single city
+        i0, j0, i1, j1 = a.region
+        c = city.voxel_size
+        city = city.crop(i0 * c, j0 * c, (i1 - i0) * c, (j1 - j0) * c)
+    return city
 
 
 def _save_map(city, pts_idx, vals, every, out, title, cmap, unit):
@@ -86,7 +91,8 @@ def main(argv=None):
 
     def city_arg(q):
         q.add_argument("city")
-        q.add_argument("--region", type=int, nargs=4)
+        q.add_argument("--region", type=int, nargs=4,
+                       help="i0 j0 i1 j1: tiles of a tiled city (.ocz), or columns of a single city (.npz)")
         q.add_argument("-o", "--out")
 
     b = sub.add_parser("build", help="one ColumnCity from footprints")

@@ -11,7 +11,7 @@ model to store it, run simulations on it, analyse it, train models on it and
 show it.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/gifs/orbit.gif" width="70%" alt="A block of downtown Osaka built from PLATEAU data at 1 m">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/gifs/octree_cells.gif" width="75%" alt="A 256 m tile of Daejeon as 3D octree cells: building cells, air cells that shrink near buildings, and pedestrian cells at street level">
 </p>
 
 ## What it is for

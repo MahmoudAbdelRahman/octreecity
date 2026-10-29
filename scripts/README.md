@@ -31,6 +31,8 @@ templates.
 | `check_paper_cells.py` | checks the library rebuilds the paper's cells and parent-link graph exactly | paper-code `geo_oct.pkl`, Daejeon height pictures (urban_wind) |
 | `train_parents_lib.py` | the paper's parent-links experiment (variant B) written with the library; `--check` shows the model equals the paper's | paper-code `geo_oct.pkl`, Daejeon height pictures, torch |
 | `check_paper_3d.py` | checks the library rebuilds the paper's 3D token sets (oct3d, vox3d); found the 128 m block bug in train_oct3d.py | paper-code `geo_oct.pkl` and scripts, Daejeon height pictures, torch |
+| `check_paper_infill.py` | checks the library rebuilds the paper's masked-infill token sets (cells split around a hidden patch, 8 nearest neighbours) | paper-code `geo_oct.pkl`, `geo_vox.pkl` and scripts, Daejeon height pictures, torch |
+| `scale_osaka.py` | scale test: cells, parents, links and tokens for all 3,475 Osaka tiles; one tree over 4 km x 4 km | `data/osaka_1m.ocz` |
 
 Run any of them from the repository root, for example
 `uv run python scripts/plot_concept.py`.

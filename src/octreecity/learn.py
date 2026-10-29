@@ -124,7 +124,7 @@ def _column(tree, name, parents=None):
 
 
 def tokens(tree, features, links, targets=(), select=None, parents=None, parent_features=None,
-           k=None, self_first=True, scale=16.0, order=None):
+           k=None, self_first=True, scale=16.0, order=None, near_dims=3):
     """Tokens and key tables for a model.
 
     features / targets: leaf column names (tree.cells or a built-in, see
@@ -140,6 +140,8 @@ def tokens(tree, features, links, targets=(), select=None, parents=None, parent_
         dropped (counted in dropped_links), the nearest kept.
     order: link kind names in the order keys are listed (default the order
         in links); within a kind, nearest first.
+    near_dims: axes used for "nearest" (2 = distance in the x-y plane, for
+        one horizontal layer of cells whose cubes reach different heights).
     """
     n = tree.n_leaves
     sel = np.ones(n, bool) if select is None else np.asarray(select, bool)
@@ -182,7 +184,7 @@ def tokens(tree, features, links, targets=(), select=None, parents=None, parent_
     kind_rank = np.arange(len(L.kinds))
     if order is not None:
         kind_rank = np.array([list(order).index(k) if k in order else len(order) for k in L.kinds])
-    d = np.linalg.norm(pos[L.dst] - pos[L.src], axis=1)
+    d = np.linalg.norm((pos[L.dst] - pos[L.src])[:, :near_dims], axis=1)
     o = np.lexsort((d, kind_rank[L.kind], L.src))
     s_, d_, kd = L.src[o], L.dst[o], L.kind[o]
     rank = np.arange(s_.size) - np.searchsorted(s_, s_)

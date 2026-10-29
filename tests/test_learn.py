@@ -71,3 +71,13 @@ def test_reach_grows_with_hops(tree):
     tok = tokens(tree, ["size_m"], neighbours(tree, mask=tree.in_box((0, 0, 0), (32, 32, 1))),
                  select=tree.in_box((0, 0, 0), (32, 32, 1)))
     assert 0 < reach_m(tok, 1) < reach_m(tok, 3)
+
+
+def test_near_dims_ranks_in_the_plane(tree):
+    layer = tree.in_box((0, 0, 0), (32, 32, 1))
+    L = neighbours(tree, mask=layer)
+    t3 = tokens(tree, ["size_m"], L, select=layer, k=3)
+    t2 = tokens(tree, ["size_m"], L, select=layer, k=3, near_dims=2)
+    d2 = np.linalg.norm(t2.offset[:, 1:, :2], axis=2)
+    assert (np.diff(np.where(t2.valid[:, 1:], d2, np.inf), axis=1) >= -1e-6).all()
+    assert t3.idx.shape == t2.idx.shape

@@ -5,7 +5,7 @@ Core (no domain words):
 | Module | What it contains |
 |---|---|
 | `octreecity.classes` | `Classes`: the tree of class names (semantic structure), `EMPTY` |
-| `octreecity.sources` | `GridSource`, `ColumnSource`, `SparseSource` (`from_points`), `Source`, `Summary` |
+| `octreecity.sources` | `GridSource`, `ColumnSource`, `SparseSource` (`from_points`, `from_surfaces`), `Source`, `Summary` |
 | `octreecity.build` | `build(source, rule, max_level, min_level)`, `uniform(source, level)` |
 | `octreecity.rules` | `mixed`, `varies`, `changes`, `larger_than`, `where`, `never`; combine with `\|` `&` `~` |
 | `octreecity.octree` | `LinearOctree`: cell table (`label`, `cells`, `series`, `add_snapshot`), `parents`, `in_box`, `balance`, `refine_where` |
@@ -21,7 +21,7 @@ City tools (use the `octreecity.urban` preset of class names):
 |---|---|
 | `octreecity.urban` | `CLASSES`, `AIR`, `GROUND`, `BUILDING`, `TREE`, `WATER`, `GRASS`, `PAVEMENT`, `ROAD`, colours |
 | `octreecity.easy` | `city_from_osm(lat, lon, size_m)`: one call, any place, data from OpenStreetMap |
-| `octreecity.features` | `read_citygml`, `read_geojson`, `read_osm_overpass`, `Features`, `reproject` |
+| `octreecity.features` | `read_citygml` (footprints), `read_citygml_surfaces` (3D surfaces with their kind), `read_geojson`, `read_osm_overpass`, `Features`, `Surfaces`, `reproject` |
 | `octreecity.builder` | `CityBuilder`: terrain, land cover, trees, buildings; `rasterize` |
 | `octreecity.columns` | `ColumnCity`: the storage format, `crop`, `to_octree`, `to_dense`, `save` / `load` |
 | `octreecity.tiles` | `build_tiled`, `TiledCity` (`tile`, `region`), `TiledCityWriter` |

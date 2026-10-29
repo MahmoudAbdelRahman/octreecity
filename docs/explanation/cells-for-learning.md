@@ -38,10 +38,16 @@ is inside, and the count, sum, min and max of each attribute. Three are ready:
 |---|---|---|
 | `GridSource` | a full voxel grid of class ids (+ attribute grids) | any data already voxelised: scans, simulations, meshes |
 | `ColumnSource` | runs of classes along each vertical column | height maps, LoD1 blocks, tree canopies over air, bridges, overhangs |
-| `SparseSource` | occupied voxels only | point clouds (`SparseSource.from_points`), surface samples of meshes |
+| `SparseSource` | occupied voxels only | point clouds (`from_points`), 3D polygons such as CityGML LoD2-4 surfaces or mesh faces (`from_surfaces`) |
 
 For anything else (a mesh tested box by box, a database), write a class with
 one method, `summarize(x, y, z, size)`.
+
+CityGML surfaces keep their meaning: `read_citygml_surfaces` returns every
+polygon with its kind (WallSurface, RoofSurface, GroundSurface ...) and the
+building's attributes, so walls and roofs become classes of your tree
+(`scripts/demo_lod2.py`). Points and surfaces mark only the surfaces: the
+inside of a closed solid stays empty.
 
 ## 3. Build: split by your rule
 
@@ -95,6 +101,9 @@ links = neighbours(tree, mask=layer) | hierarchy(tree, p)
 tok = tokens(tree, ["height", "size_m"], links, targets=["svf"],
              select=layer, parents=p, k=16)
 ```
+
+For one horizontal layer of cells, pass `near_dims=2` so "nearest" means
+nearest in the plane (the cubes of a layer reach different heights).
 
 `tok` holds plain arrays: one row per cell (features, position, size, targets)
 and, per cell, the cells it reads with their relative offsets. That is what a

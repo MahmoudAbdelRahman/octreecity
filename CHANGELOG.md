@@ -65,6 +65,14 @@ rebuild the token sets of the experiments in octreecity-paper-code exactly
 (all 334 Daejeon tiles), and `train_parents_lib.py` reproduces the
 parent-links result with the library's model.
 
+### Checked at city scale
+
+All 3,475 Osaka tiles (891 million cells): the same cells as 0.1.2, built in
+155 s instead of 210 s. Cells, parents, links and tokens for every tile:
+about 1 billion tokens, under 2 hours, 4 GB peak memory. One tree over
+4 km x 4 km at 1 m (16 x 16 tiles): 87 million cells instead of 4.3 billion
+uniform ones, built in 28 s.
+
 ## 0.1.2
 
 Octrees for any city size (air padding), `city_cache` for `city_from_osm`,

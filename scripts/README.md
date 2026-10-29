@@ -17,6 +17,8 @@ templates.
 | `video_error_merge.py` | explainer video: merging cells by error | a CFD wind result (urban_wind project) |
 | `video_split_merge.py` | explainer video: the split-and-merge loop | the same |
 
+`outputs/gifs/octree_cells.gif` (top of the README) is recorded from the Tile 285 viewer in octreecity-paper-code (`experiments/figures/oct3d_viewer.html`): 60 headless-Chrome screenshots, 6° apart, joined with ffmpeg.
+
 ## Real-data demos
 
 | Script | Shows | Needs |

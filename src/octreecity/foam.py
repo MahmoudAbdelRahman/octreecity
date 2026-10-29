@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .octree import AIR
+from .classes import EMPTY
 
 # per direction: axis, side, and the face's 4 corner offsets (unit cube),
 # ordered counter-clockwise seen from outside (normal = +side * axis)
@@ -29,14 +29,14 @@ _FACES = {
 _SIDE_NAMES = {(0, -1): "xmin", (0, 1): "xmax", (1, -1): "ymin", (1, 1): "ymax", (2, -1): "zmin", (2, 1): "zmax"}
 
 
-def build_polymesh(tree, fluid=(AIR,), label_names=None):
+def build_polymesh(tree, fluid=(EMPTY,), label_names=None):
     """Return dict(points, faces, owner, neighbour, patches) in OpenFOAM order.
 
     points: (P, 3) float metres. faces: list of int arrays. owner/neighbour:
     int arrays (neighbour only for internal faces). patches: list of
     (name, start, n).
     """
-    from .builder import LABELS
+    from .urban import LABELS
 
     names = label_names or LABELS
     isf = np.isin(tree.label, fluid)

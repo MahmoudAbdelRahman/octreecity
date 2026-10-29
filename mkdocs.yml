@@ -27,6 +27,7 @@ nav:
       - Run the notebook: how-to/run-the-notebook.md
   - Explanation:
       - How OctreeCity works: explanation/how-it-works.md
+      - Cells for learning: explanation/cells-for-learning.md
       - Adaptive cells: explanation/adaptive-cells.md
   - Reference:
       - Modules and functions: reference/api.md

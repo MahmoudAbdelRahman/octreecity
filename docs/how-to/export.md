@@ -26,6 +26,12 @@ x, names = tensors_2d(city, factor=2)       # [C, nx/2, ny/2]: height, ground, p
 v = tensors_3d(city, labels=[2, 3], factor=4)   # [2, nx/4, ny/4, nz/4] label fractions
 ```
 
+These are uniform grids, for models that need them (U-Nets, 3D CNNs). To give
+a model the adaptive cells themselves, one row per cell and the cells each one
+reads, use `octreecity.learn.tokens`; see
+[cells for learning](../explanation/cells-for-learning.md).
+
+
 ## OpenFOAM mesh (CFD plugin)
 
 ```python

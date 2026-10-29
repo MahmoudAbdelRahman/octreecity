@@ -19,7 +19,7 @@ import zipfile
 import numpy as np
 
 from .columns import ColumnCity
-from .octree import AIR
+from .classes import EMPTY as AIR  # empty space
 
 
 class TiledCityWriter:
@@ -134,7 +134,7 @@ def _column_slice(t, x, n, nz):
 
 def _build_one(args):
     from .builder import CityBuilder
-    from .sources import Features
+    from .features import Features
     import shapely
 
     i, j, x0, y0, tile, cell, air_above, bld, layers = args

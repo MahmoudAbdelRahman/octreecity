@@ -92,7 +92,7 @@ Run it with `./demo.sh` (see [running the notebook](https://github.com/MahmoudAb
 ## Using your own data
 
 ```python
-from octreecity.sources import read_citygml
+from octreecity.features import read_citygml
 from octreecity.builder import CityBuilder
 
 x0, y0 = 232031.0, 418662.0                 # south-west corner, in the data's coordinates (metres)
@@ -195,6 +195,28 @@ Every cell keeps a label (ground, building, tree, water, grass, road ... or
 your own classes), and any dense voxel grid can be converted in and out
 exactly.
 
+**For learning, the core is general.** Any data that can say "what is inside
+this box" (height maps, voxel grids, point clouds, your own source) builds a
+tree by any split rule you give, over classes (at any depth of your own class
+tree) or attributes. Cells carry a table of values and snapshots over time,
+links say which cells relate to which (neighbours and parents built in), and
+everything exports as arrays ready for PyTorch:
+
+```python
+from octreecity.build import build
+from octreecity.rules import mixed, varies
+from octreecity.sources import ColumnSource
+from octreecity.links import neighbours, hierarchy
+from octreecity.learn import tokens
+
+src = ColumnSource(city, attrs={"height": heights})        # a value per column
+tree = build(src, mixed() | varies("height", 3.0), max_level=5)
+p = tree.parents()
+tok = tokens(tree, ["size_m"], neighbours(tree) | hierarchy(tree, p), parents=p, k=16)
+```
+
+See [cells for learning](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/explanation/cells-for-learning.md).
+
 *The animation under "Simulation grids" shows the idea on a simulated wind
 field: start coarse, split where neighbouring values differ, merge where they
 agree, repeat.*
@@ -229,9 +251,11 @@ existing tools:
 
 ## Status
 
-Version 0.1 (alpha). It is tested (56 tests, Python 3.10 to 3.13) with Osaka
-(PLATEAU) and Daejeon (V-World and OpenStreetMap). File formats may still
-change before 1.0. Known gaps:
+Version 0.2 (alpha). It is tested (100 tests, Python 3.10 to 3.13) with Osaka
+(PLATEAU) and Daejeon (V-World and OpenStreetMap), and the general core
+rebuilds the token sets of its paper's experiments exactly
+(`scripts/check_paper_*.py`). File formats may still change before 1.0. See
+[CHANGELOG.md](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/CHANGELOG.md). Known gaps:
 
 - No elevation model (DEM) reader yet. `city_from_osm` uses flat terrain.
 - The OpenFOAM export passes the package's own mesh checks but has not yet
@@ -240,6 +264,8 @@ change before 1.0. Known gaps:
   light), and trees are treated as opaque.
 - The parallel tiled builder handles buildings and land cover, not yet trees
   or terrain.
+- Point clouds and 3D surfaces (`SparseSource.from_points`, `from_surfaces`)
+  mark surfaces only: the inside of a closed solid stays empty.
 
 Questions, ideas and issues are welcome on
 [GitHub](https://github.com/MahmoudAbdelRahman/octreecity/issues); see

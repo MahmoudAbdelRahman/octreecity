@@ -66,7 +66,7 @@ in and keep everything else from OpenStreetMap.
 """)
 code("""
 from pathlib import Path
-from octreecity.sources import read_citygml, reproject, Features
+from octreecity.features import read_citygml, reproject, Features
 
 gml = Path.home() / "Projects/urban_wind/data/raw/daejeon_kaist_vworld_all.gml.gz"
 if gml.exists():

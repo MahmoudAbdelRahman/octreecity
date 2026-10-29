@@ -14,7 +14,7 @@ import numpy as np
 
 from octreecity.analysis import street_points, sun_hours, surface_height
 from octreecity.columns import ColumnCity
-from octreecity.octree import BUILDING, TREE
+from octreecity.urban import BUILDING, TREE
 
 ROOT = Path(__file__).resolve().parent.parent
 BG, FG, MUTED = "#0f1318", "#e6e9ee", "#8b95a3"

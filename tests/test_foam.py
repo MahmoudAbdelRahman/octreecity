@@ -1,6 +1,8 @@
 import numpy as np
 
-from octreecity import AIR, build_city
+from octreecity import build_city
+
+from octreecity.urban import AIR
 from octreecity.adapt import adapt, sample
 from octreecity.foam import build_polymesh, check_polymesh, write_polymesh
 

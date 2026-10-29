@@ -19,7 +19,8 @@ from matplotlib.collections import PolyCollection
 
 from octreecity.adapt import adapt, sample
 from octreecity.analysis import sun_hours
-from octreecity.octree import AIR, BUILDING, LinearOctree, pad_to_multiple
+from octreecity.octree import LinearOctree, pad_to_multiple
+from octreecity.urban import AIR, BUILDING
 from octreecity.tiles import TiledCity
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -4,7 +4,7 @@ import numpy as np
 
 from octreecity.analysis import shadow, sky_view_factor, street_points, sun_hours, sun_position
 from octreecity.columns import ColumnCity
-from octreecity.octree import BUILDING
+from octreecity.urban import BUILDING
 
 
 def canyon(W=20, H=20, n=400):

@@ -2,7 +2,7 @@ import numpy as np
 
 from octreecity.columns import ColumnCity
 from octreecity.exports import surface_quads, tensors_2d, tensors_3d, write_obj
-from octreecity.octree import BUILDING, GROUND
+from octreecity.urban import BUILDING, GROUND
 
 
 def city():

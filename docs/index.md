@@ -24,6 +24,7 @@ The documentation follows the [Diátaxis](https://diataxis.fr/) structure:
 
 - [How OctreeCity works](explanation/how-it-works.md): columns and octrees
 - [Adaptive cells](explanation/adaptive-cells.md): cell sizes, refinement, `adapt()`
+- [Cells for learning](explanation/cells-for-learning.md): sources, split rules, cell tables, links, arrays for a model
 
 ## Reference: exact details
 

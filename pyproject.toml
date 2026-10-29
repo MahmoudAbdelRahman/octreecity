@@ -1,11 +1,11 @@
 [project]
 name = "octreecity"
-version = "0.1.2"
-description = "Compact, adaptive voxel cities: column storage, octrees on demand, sky view and sun analysis, 3D views, mesh and CFD export"
+version = "0.2.0"
+description = "Adaptive octree cells for 3D space and AI: any data source, your own classes and split rules, cell tables, links and arrays for PyTorch; city tools for storage, sun and sky analysis, 3D views, mesh and CFD export"
 authors = [{ name = "Mahmoud AbdelRahman" }]
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["urban", "voxel", "octree", "city", "3d city model", "cfd", "gis", "sky view factor", "solar", "citygml", "openstreetmap"]
+keywords = ["urban", "voxel", "octree", "city", "3d city model", "machine learning", "tokens", "pytorch", "cfd", "gis", "sky view factor", "solar", "citygml", "openstreetmap", "point cloud"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: GIS",
     "Topic :: Scientific/Engineering :: Visualization",
 ]
@@ -32,6 +33,7 @@ dependencies = [
 [project.optional-dependencies]
 viz = ["plotly>=6.0", "matplotlib>=3.8"]
 notebook = ["plotly>=6.0", "matplotlib>=3.8", "jupyterlab>=4.0", "ipykernel>=6.0"]
+torch = ["torch>=2.1"]
 
 [project.urls]
 Homepage = "https://github.com/MahmoudAbdelRahman/octreecity"

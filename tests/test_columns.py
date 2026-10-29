@@ -1,7 +1,9 @@
 import numpy as np
 import pytest
 
-from octreecity import BUILDING, GROUND, TREE, LinearOctree, rasterize_columns
+from octreecity import LinearOctree, rasterize_columns
+
+from octreecity.urban import CLASSES, BUILDING, GROUND, TREE
 from octreecity.columns import ColumnCity
 
 from test_octree import random_city
@@ -70,7 +72,9 @@ def test_crop_and_repr():
     sub = col.crop(10, 20, 40, 30)
     assert sub.shape[:2] == (20, 15) and sub.origin[:2] == (110.0, 70.0)
     assert (sub.to_dense() == col.to_dense()[5:25, 10:25]).all()
-    assert "ColumnCity" in repr(col) and "building" in repr(col)
+    assert "ColumnCity" in repr(col) and "contains: 1, 2, 3" in repr(col)
+    col.classes = CLASSES
+    assert "building" in repr(col) and sub.classes is None
 
 
 def test_to_octree_pads_any_size():

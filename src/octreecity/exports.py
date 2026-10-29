@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .octree import AIR
+from .classes import EMPTY as AIR  # empty space
 
 DEFAULT_COLORS = {1: (0.54, 0.48, 0.38), 2: (0.79, 0.80, 0.83), 3: (0.25, 0.54, 0.29), 4: (0.24, 0.50, 0.77),
                   5: (0.53, 0.70, 0.35), 6: (0.72, 0.68, 0.61), 7: (0.36, 0.38, 0.40)}
@@ -84,7 +84,7 @@ def surface_quads(city, labels=None, x0=0, x1=None):
 
 def write_obj(city, path, labels=None, names=None, colors=None, strip=256):
     """Write the label boundaries as an OBJ (+ .mtl). Works in x strips."""
-    from .builder import LABELS
+    from .urban import LABELS
 
     names = names or LABELS
     colors = colors or DEFAULT_COLORS

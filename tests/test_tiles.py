@@ -1,6 +1,8 @@
 import numpy as np
 
-from octreecity import BUILDING, rasterize_columns
+from octreecity import rasterize_columns
+
+from octreecity.urban import BUILDING
 from octreecity.columns import ColumnCity
 from octreecity.tiles import TiledCity, TiledCityWriter
 
@@ -46,7 +48,7 @@ def test_roundtrip_and_region(tmp_path):
 def test_build_tiled(tmp_path):
     import shapely
 
-    from octreecity.sources import Features
+    from octreecity.features import Features
     from octreecity.tiles import build_tiled
 
     geoms = [shapely.box(10 + 40 * k, 10, 30 + 40 * k, 30) for k in range(5)]

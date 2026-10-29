@@ -11,9 +11,8 @@ view stays quick; the data itself is untouched.
 
 import numpy as np
 
-from .builder import GRASS, PAVEMENT, ROAD, WATER
 from .columns import ColumnCity
-from .octree import AIR, BUILDING, GROUND, TREE
+from .urban import AIR, BUILDING, GRASS, GROUND, PAVEMENT, ROAD, TREE, WATER
 
 STYLE = {
     BUILDING: ("buildings", "#d9dce3"),

@@ -17,8 +17,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from . import morton
-from .octree import AIR, GROUND, LinearOctree
+from .classes import EMPTY, Classes
+from .octree import LinearOctree
 
 
 @dataclass
@@ -30,6 +30,7 @@ class ColumnCity:
     voxel_size: float = 1.0
     origin: tuple = (0.0, 0.0, 0.0)
     crs: str = None
+    classes: Classes = None
 
     # ------------------------------------------------------------------ build
 
@@ -48,7 +49,7 @@ class ColumnCity:
 
     @classmethod
     def from_heightfield(cls, ground, surface, surface_label, nz, voxel_size=1.0,
-                         origin=(0.0, 0.0, 0.0), air_label=AIR, ground_label=GROUND):
+                         origin=(0.0, 0.0, 0.0), air_label=EMPTY, ground_label=1):
         """Same rule as LinearOctree.from_heightfield (voxel centre z + 0.5),
         built directly as runs, without a dense grid."""
         ground = np.asarray(ground, np.float64)
@@ -67,7 +68,7 @@ class ColumnCity:
                    labs[has].astype(np.uint8), voxel_size, tuple(origin))
 
     @classmethod
-    def from_layers(cls, shape, layers, default=AIR, voxel_size=1.0,
+    def from_layers(cls, shape, layers, default=EMPTY, voxel_size=1.0,
                     origin=(0.0, 0.0, 0.0), strip=16):
         """Paint layers in order: each is (bottom, top, label) with bottom/top
         rasters in voxel units (voxel filled if bottom <= z + 0.5 < top) and
@@ -102,8 +103,8 @@ class ColumnCity:
     def __repr__(self):
         nx, ny, nz = self.shape
         c = self.voxel_size
-        from .builder import LABELS
-        labs = [LABELS.get(int(v), str(v)) for v in np.unique(self.label) if v != 0]
+        name = (lambda v: self.classes.name(v)) if self.classes is not None else str
+        labs = [name(int(v)) for v in np.unique(self.label) if v != EMPTY]
         return (f"ColumnCity {nx * c:g} x {ny * c:g} x {nz * c:g} m at {c:g} m cells "
                 f"({nx} x {ny} columns, {self.n_runs:,} runs, {self.nbytes / 1e6:.1f} MB in memory)\n"
                 f"  contains: {', '.join(labs)}\n"
@@ -117,7 +118,7 @@ class ColumnCity:
         i1, j1 = min(self.shape[0], i0 + int(round(width / c))), min(self.shape[1], j0 + int(round(depth / c)))
         sub = ColumnCity.from_dense(self.to_dense(i0, i1)[:, j0:j1], c,
                                     (self.origin[0] + i0 * c, self.origin[1] + j0 * c, self.origin[2]))
-        sub.crs = self.crs
+        sub.crs, sub.classes = self.crs, self.classes
         return sub
 
     # ---------------------------------------------------------------- queries
@@ -160,43 +161,30 @@ class ColumnCity:
         lengths = (self.top[k0:k1].astype(np.int64) - self.bottoms()[k0:k1])
         return np.repeat(self.label[k0:k1], lengths).reshape(x1 - x0, ny, nz)
 
-    def to_octree(self, max_level, strip=None):
-        """Octree of the same voxels, built strip by strip (no full dense grid).
+    def to_octree(self, max_level):
+        """Octree of the same voxels: the smallest tree whose leaves each hold
+        one class. Built top-down from the runs (octreecity.build with
+        ColumnSource and the mixed() rule), without a voxel grid.
 
-        The box is topped up with air to a multiple of the largest cell
-        (2**max_level voxels) in x, y and z, so any city size works: the
+        The box is topped up with empty space to a multiple of the largest
+        cell (2**max_level voxels) in x, y and z, so any city size works: the
         extra cells lie beyond the city's far (east and north) edges and the
-        top, and merge into large air cells.
+        top, and merge into large empty cells.
         """
-        S = 1 << max_level
-        nx, ny = self.shape[:2]
-        px, py = -(-nx // S) * S, -(-ny // S) * S
-        nz = -(-self.shape[2] // S) * S
-        strip = S if strip is None else strip
-        if strip % S:
-            raise ValueError("strip must be a multiple of 2**max_level")
-        codes, levels, labels = [], [], []
-        for x0 in range(0, px, strip):
-            x1 = min(px, x0 + strip)
-            d = np.full((x1 - x0, py, nz), AIR, np.uint8)
-            if x0 < nx:
-                part = self.to_dense(x0, min(nx, x1))
-                d[:part.shape[0], :ny, :part.shape[2]] = part
-            t = LinearOctree.from_dense(d, max_level)
-            x, y, z = t.corners()
-            codes.append(morton.encode(x + x0, y, z))
-            levels.append(t.level)
-            labels.append(t.label)
-        return LinearOctree((px, py, nz), max_level, np.concatenate(codes),
-                            np.concatenate(levels), np.concatenate(labels),
-                            self.voxel_size, self.origin)
+        from .build import build
+        from .rules import mixed
+        from .sources import ColumnSource
+
+        return build(ColumnSource(self), mixed(), max_level)
 
     # --------------------------------------------------------------------- io
 
     def save(self, path):
         np.savez_compressed(path, shape=np.array(self.shape), counts=np.diff(self.offsets).astype(np.uint16),
                             top=self.top, label=self.label, voxel_size=self.voxel_size,
-                            origin=np.array(self.origin), crs=str(self.crs or ""))
+                            origin=np.array(self.origin), crs=str(self.crs or ""),
+                            **({} if self.classes is None else dict(zip(("class_names", "class_parent"),
+                                                                        self.classes.to_arrays()))))
 
     @classmethod
     def load(cls, path):
@@ -204,5 +192,7 @@ class ColumnCity:
         offsets = np.zeros(d["counts"].size + 1, np.int64)
         np.cumsum(d["counts"], out=offsets[1:])
         crs = str(d["crs"]) if "crs" in d.files and str(d["crs"]) else None
+        classes = (Classes.from_arrays(d["class_names"], d["class_parent"])
+                   if "class_names" in d.files else None)
         return cls(tuple(int(v) for v in d["shape"]), offsets, d["top"], d["label"],
-                   float(d["voxel_size"]), tuple(float(v) for v in d["origin"]), crs)
+                   float(d["voxel_size"]), tuple(float(v) for v in d["origin"]), crs, classes)

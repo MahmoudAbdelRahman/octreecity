@@ -10,7 +10,9 @@ from pathlib import Path
 
 import numpy as np
 
-from octreecity import BUILDING, LinearOctree, pad_to_multiple, rasterize_columns
+from octreecity import LinearOctree, pad_to_multiple, rasterize_columns
+
+from octreecity.urban import BUILDING
 from octreecity.columns import ColumnCity
 
 SRC = Path.home() / "Projects/urban_wind/data/cities/osaka/height_pictures.npz"

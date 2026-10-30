@@ -20,6 +20,12 @@ Each leaf gets, in its cell table (tree.cells):
     share           (n, C) volume share of every class   [shares=True]
     <attr>          mean of the attribute over the box     [stats has "mean"]
     <attr>_std, _min, _max, _count                         [if in stats]
+    <id layer>      for a source with id layers (source.categorical): the
+                    one object id all voxels of the leaf share, as exact
+                    int64, or -2 when they hold several (-1 = no object).
+                    Never averaged. Listed in tree.id_columns.
+
+The tree also takes the source's crs and object table (tree.objects).
 """
 
 import numpy as np
@@ -63,7 +69,11 @@ def _tree(source, shape, max_level, leaves, shares, stats, label_depth=None):
     cells = {}
     if shares:
         cells["share"] = summ.share().astype(np.float32)
+    cat = getattr(source, "categorical", None) or {}
     for a in source.attributes:
+        if a in cat:
+            cells[a] = _ids_of(summ, a, cat[a])
+            continue
         for st in stats:
             key = a if st == "mean" else f"{a}_{st}"
             cells[key] = getattr(summ, st)(a)
@@ -73,8 +83,25 @@ def _tree(source, shape, max_level, leaves, shares, stats, label_depth=None):
         merged = np.zeros_like(counts)
         np.add.at(merged.T, up, counts.T)
         counts = merged
-    return LinearOctree(shape, int(max_level), morton.encode(x, y, z), level, counts.argmax(1),
-                        source.voxel_size, source.origin, classes=source.classes, cells=cells)
+    tree = LinearOctree(shape, int(max_level), morton.encode(x, y, z), level, counts.argmax(1),
+                        source.voxel_size, source.origin, classes=source.classes, cells=cells,
+                        crs=getattr(source, "crs", None), id_columns=tuple(cat))
+    tree.objects = getattr(source, "objects", None)
+    return tree
+
+
+def _ids_of(summ, name, values):
+    """Exact int64 id per box from the min / max of its id codes: the id
+    when min == max, -2 (mixed) when not, -1 when no voxel has a code."""
+    from .objects import MIXED, NONE
+
+    lo, hi = summ.min(name), summ.max(name)
+    out = np.full(lo.shape, NONE, np.int64)
+    ok = np.isfinite(lo)
+    same = ok & (lo == hi)
+    out[same] = np.asarray(values, np.int64)[lo[same].astype(np.int64)]
+    out[ok & ~same] = MIXED
+    return out
 
 
 def uniform(source, level, shares=False, stats=("mean",)):

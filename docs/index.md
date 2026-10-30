@@ -13,6 +13,7 @@ The documentation follows the [Diátaxis](https://diataxis.fr/) structure:
 ## How-to guides: get a task done
 
 - [Use your own data](how-to/own-data.md) (CityGML, GeoJSON, terrain, land cover, trees)
+- [Objects and queries](how-to/objects-and-queries.md) (object ids per cell, the object table, neighbours, parents, siblings)
 - [Show cities and results in 3D](how-to/3d-views.md)
 - [Compute sky view, shadows and sun hours](how-to/sky-and-sun.md)
 - [Work with whole cities](how-to/whole-cities.md)

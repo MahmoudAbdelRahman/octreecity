@@ -9,7 +9,7 @@ label) in a projected CRS, in metres. `CityBuilder` turns them into voxels.
 |---|---|
 | CityGML 2.0/3.0, LoD0-2, `.gml` or `.gml.gz` (PLATEAU, V-World, 3D BAG...) | `sources.read_citygml(path)` |
 | GeoJSON (e.g. an OSM or QGIS export) | `sources.read_geojson(path, height_key="height", crs_to=EPSG)` |
-| Overpass API JSON (`out geom;`) | `sources.read_osm_overpass(json, crs_to=EPSG)` |
+| Overpass API JSON (`out geom;`) | `sources.read_osm_overpass(json, crs_to=EPSG)`: keeps the OSM type and id (`attrs["source_id"]`), holes, `min_height` of building parts |
 | A list of (WKB, height) pairs | `Features.from_wkb(pairs)` |
 | Anything shapely can make | `Features(geoms, height=..., base=...)` |
 
@@ -43,6 +43,16 @@ city = b.build(air_above=20)
 
 Layers are painted in order; later ones win. Rasters are indexed `[i, j]` with
 `i` along x (east) and `j` along y (north), at cell centres.
+
+A column belongs to a shape when its cell centre is inside the shape (holes
+respected). A centre that lies exactly on a wall shared by two buildings goes
+to one side only, so touching buildings never claim the same column. Each
+shape is painted on its own, so blocks stacked on blocks keep their own
+voxels: `Features(min_height=...)` lifts a building part above the ground.
+
+Every `add_*` call also takes `ids` (one object id per shape) and a `layer`
+name, so each voxel knows which object it belongs to. See
+[objects and queries](objects-and-queries.md).
 
 ## Labels
 

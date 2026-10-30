@@ -71,6 +71,21 @@ def transfer(old, old_values, new):
     return out
 
 
+def transfer_ids(old, old_ids, new, mixed=-2):
+    """Like transfer, for ids (categories): a new leaf inside an old leaf
+    takes its id; a new leaf covering several takes the id they share, or
+    -2 (mixed). Exact for int64; never averaged."""
+    v = np.asarray(old_ids, np.int64)
+    span = np.left_shift(np.uint64(1), 3 * new.level.astype(np.uint64))
+    lo = np.searchsorted(old.code, new.code, side="right") - 1
+    hi = np.maximum(np.searchsorted(old.code, new.code + span, side="left"), lo + 1)
+    vp = np.r_[v, v[-1:]]
+    idx = np.stack([lo, hi], 1).ravel()
+    mn = np.minimum.reduceat(vp, idx)[::2]
+    mx = np.maximum.reduceat(vp, idx)[::2]
+    return np.where(mn == mx, mn, mixed)
+
+
 def adapt(tree, values, refine_tol, coarsen_tol=None, fluid=(EMPTY,), buffer=1,
           min_level=0, max_level=None, max_cells=None, balance=26):
     """One split-and-merge pass. Returns (new_tree, values on new_tree).

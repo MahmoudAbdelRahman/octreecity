@@ -20,17 +20,21 @@ GML = "http://www.opengis.net/gml"
 @dataclass
 class Features:
     geoms: np.ndarray                 # shapely geometries (object array)
-    height: np.ndarray = None         # height above base (m), nan = unknown
+    height: np.ndarray = None         # top above base (m), nan = unknown
     base: np.ndarray = None           # absolute base elevation (m), nan = unknown
     label: np.ndarray = None          # uint8 per feature, or None
     attrs: dict = field(default_factory=dict)
+    min_height: np.ndarray = None     # bottom above base (m), nan/0 = on the ground
 
     def __post_init__(self):
-        self.geoms = np.asarray(self.geoms, dtype=object)
+        geoms = np.empty(len(self.geoms), dtype=object)
+        geoms[:] = list(self.geoms)
+        self.geoms = geoms
         n = len(self.geoms)
         nan = lambda: np.full(n, np.nan)
         self.height = nan() if self.height is None else np.asarray(self.height, np.float64)
         self.base = nan() if self.base is None else np.asarray(self.base, np.float64)
+        self.min_height = nan() if self.min_height is None else np.asarray(self.min_height, np.float64)
 
     def __len__(self):
         return len(self.geoms)
@@ -42,7 +46,7 @@ class Features:
         mask = np.asarray(mask)
         return Features(self.geoms[mask], self.height[mask], self.base[mask],
                         None if self.label is None else np.asarray(self.label)[mask],
-                        {k: np.asarray(v)[mask] for k, v in self.attrs.items()})
+                        {k: _take(v, mask) for k, v in self.attrs.items()}, self.min_height[mask])
 
     def clip(self, x0, y0, x1, y1):
         """Features whose bounding box touches the rectangle (geometry unchanged)."""
@@ -152,37 +156,112 @@ def _height_from_tags(p, height_key=None, levels_key=None, level_height=3.0):
     return np.nan
 
 
-def read_osm_overpass(json_data, crs_to):
-    """Ways/relations from an Overpass API JSON answer ('out geom;') as
-    Features with their OSM tags. Closed ways become polygons, open ways
-    lines (roads, rivers); multipolygon relations use their outer rings."""
-    geoms, tags = [], []
+def _num(v):
+    try:
+        return float(str(v).split()[0].replace("m", "").replace(",", "."))
+    except (TypeError, ValueError, IndexError):
+        return np.nan
+
+
+def _min_height_from_tags(p, level_height=3.0):
+    """Bottom of a building part above the ground (m): min_height, else
+    building:min_level x level_height, else nan (on the ground)."""
+    v = _num(p.get("min_height", p.get("building:min_height")))
+    if np.isfinite(v):
+        return v
+    lv = _num(p.get("building:min_level"))
+    return lv * level_height if np.isfinite(lv) else np.nan
+
+
+def _is_line(t):
+    """Closed ways that are still lines (a roundabout, a fence, a river)."""
+    return (("highway" in t or "barrier" in t or "railway" in t
+             or t.get("natural") == "tree_row" or t.get("waterway") not in (None, "riverbank"))
+            and t.get("area") != "yes")
+
+
+def _ring(member):
+    xy = [(p["lon"], p["lat"]) for p in member.get("geometry") or []]
+    return xy if len(xy) >= 2 else None
+
+
+def _rings_to_polygons(rings):
+    """Closed polygons from ring pieces (ways that join end to end)."""
+    lines = [shapely.LineString(r) for r in rings]
+    if not lines:
+        return shapely.Polygon()
+    polys = shapely.get_parts(shapely.polygonize(lines))
+    if not len(polys):
+        return shapely.Polygon()
+    return shapely.union_all([shapely.make_valid(p) for p in polys])
+
+
+def read_osm_overpass(json_data, crs_to, level_height=3.0):
+    """Ways, relations and nodes from an Overpass API JSON answer ('out
+    geom;') as Features, keeping who each one is.
+
+    attrs:
+        source_id   "way/123", "relation/7", "node/9" (the OSM type and id;
+                    None if the answer has no ids)
+        tags        the OSM tags (dict per feature)
+        members     for relations: [(source id, role), ...] (else None)
+    Closed ways become polygons, except highways, barriers, waterways and
+    tree rows (lines unless area=yes); open ways are lines. Multipolygon
+    relations are their outer rings minus their inner rings (holes kept).
+    type=building relations (which only group an outline and its parts)
+    get an empty geometry. height: top above the ground from height /
+    building:height, else building:levels x level_height. min_height: the
+    bottom of building parts that start above the ground (min_height, else
+    building:min_level x level_height).
+    """
+    geoms, tags, sids, members = [], [], [], []
     for el in json_data.get("elements", []):
-        t = el.get("tags", {})
-        if el["type"] == "way" and "geometry" in el:
-            xy = [(p["lon"], p["lat"]) for p in el["geometry"]]
-            if len(xy) >= 4 and xy[0] == xy[-1]:
+        t = el.get("tags", {}) or {}
+        typ = el.get("type")
+        mem = None
+        if typ == "way" and "geometry" in el:
+            xy = [(p["lon"], p["lat"]) for p in el["geometry"] if p]
+            if len(xy) >= 4 and xy[0] == xy[-1] and not _is_line(t):
                 g = shapely.Polygon(xy)
             elif len(xy) >= 2:
                 g = shapely.LineString(xy)
             else:
                 continue
-        elif el["type"] == "relation" and "members" in el:
-            rings = [[(p["lon"], p["lat"]) for p in m["geometry"]]
-                     for m in el["members"] if m.get("role") == "outer" and "geometry" in m]
-            polys = [shapely.Polygon(r) for r in rings if len(r) >= 4 and r[0] == r[-1]]
-            if not polys:
-                continue
-            g = shapely.MultiPolygon(polys)
-        elif el["type"] == "node" and "lat" in el:
+        elif typ == "relation" and "members" in el:
+            mem = [(f"{m.get('type')}/{m.get('ref')}", m.get("role", "")) for m in el["members"]]
+            if t.get("type") == "building":
+                g = shapely.Polygon()
+            else:
+                outer = [r for m in el["members"] if m.get("role") in ("outer", "") and (r := _ring(m))]
+                inner = [r for m in el["members"] if m.get("role") == "inner" and (r := _ring(m))]
+                g = _rings_to_polygons(outer)
+                if g.is_empty:
+                    continue
+                if inner:
+                    g = g.difference(_rings_to_polygons(inner))
+        elif typ == "node" and "lat" in el:
             g = shapely.Point(el["lon"], el["lat"])
         else:
             continue
-        geoms.append(shapely.make_valid(g))
+        geoms.append(shapely.make_valid(g) if not g.is_empty else g)
         tags.append(t)
-    geoms = reproject(np.array(geoms, dtype=object), 4326, crs_to)
-    h = np.array([_height_from_tags(t) for t in tags])
-    return Features(geoms, h, attrs={"tags": np.array(tags, dtype=object)})
+        sids.append(f"{typ}/{el['id']}" if "id" in el else None)
+        members.append(mem)
+    geoms = reproject(_objects(geoms), 4326, crs_to)
+    h = np.array([_height_from_tags(t, level_height=level_height) for t in tags])
+    mh = np.array([_min_height_from_tags(t, level_height) for t in tags])
+    return Features(geoms, h, attrs={"tags": _objects(tags), "source_id": _objects(sids),
+                                     "members": _objects(members)}, min_height=mh)
+
+
+def _objects(values):
+    out = np.empty(len(values), dtype=object)
+    out[:] = values
+    return out
+
+
+def _take(v, mask):
+    return (v if isinstance(v, np.ndarray) else _objects(list(v)))[mask]
 
 
 @dataclass

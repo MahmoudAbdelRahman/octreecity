@@ -10,7 +10,7 @@ Core (no domain words):
 | `octreecity.rules` | `mixed`, `varies`, `changes`, `larger_than`, `where`, `never`; combine with `\|` `&` `~` |
 | `octreecity.octree` | `LinearOctree`: cell table (`label`, `cells`, `series`, `add_snapshot`), `id_columns`, `crs`, `objects`, `parents` (`reduce`, `how="same"` for ids), `in_box`, `balance`, `refine_where`, `select`, `touching`, `near` |
 | `octreecity.objects` | `ObjectTable` (`add`, `add_overlap`, `merge`, `select`, `tag`, `parent`, `children`, `siblings`, `ancestors`, `descendants`, `save` / `load`), `object_id`, `IdCollision` |
-| `octreecity.query` | `Query`, `Group` (`neighbours`, `within`, `nearest`, `boundary`, `parents`, `siblings`, `objects`, `voxels`), `Nodes`, `neighbour_pairs`, `cube_ids` |
+| `octreecity.query` | `Query`, `Group` (`neighbours`, `within`, `nearest`, `boundary`, `parents`, `siblings`, `objects`, `voxels`, `show`), `Nodes`, `neighbour_pairs`, `cube_ids` |
 | `octreecity.store` | `Store` (`create`, `open`, `write_tile`, `read_tile`, `read_tree`, `region`, `objects`, `edit_objects`, `build`, `compact`, `snapshot`), `round_tile` |
 | `octreecity.fill` | `from_raster`, `from_grid`, `from_function`, `from_source`, `carry` |
 | `octreecity.links` | `Links`, `neighbours`, `hierarchy`, `across`, `within`, `face_pairs` |
@@ -31,7 +31,7 @@ City tools (use the `octreecity.urban` preset of class names):
 | `octreecity.city` | `build_city(heights, pixel_size, min_cell, max_cell)` |
 | `octreecity.adapt` | `adapt`, `sample`, `transfer`, `transfer_ids`, `jump_indicator` (split and merge by a field, CFD style) |
 | `octreecity.analysis` | `street_points`, `sky_view_factor`, `shadow`, `sun_position`, `sun_hours` |
-| `octreecity.viz` | `show`, `show_values`, `show_octree`, `show_cells`, `setup_notebook` |
+| `octreecity.viz` | `show`, `show_values`, `show_octree` (`cells=` for selections), `show_selection`, `show_cells`, `setup_notebook` |
 | `octreecity.render` | `render_top`, `render_section`, `plot_slice` (images) |
 | `octreecity.exports` | `write_obj`, `surface_quads`, `tensors_2d`, `tensors_3d`, `write_vtk` |
 | `octreecity.foam` | `build_polymesh`, `check_polymesh`, `write_polymesh` (OpenFOAM) |

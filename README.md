@@ -126,6 +126,7 @@ g = tree.select(tags={"name": "Seng Poh Road"})
 g.neighbours(steps=1).objects()              # what touches the street
 tree.select(cls="building").within(10.0)     # cells within 10 m of any building
 tree.select(id=i).parents(1).siblings()      # walk the octree
+tree.select(id=i).neighbours(steps=1).show() # see any selection in 3D, as wire cubes
 city.objects.children(i)                     # the parts of building i
 ```
 

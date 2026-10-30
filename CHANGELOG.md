@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.1
+
+### New
+
+- See any selection of cells in 3D: `g.show()` on any Group (from
+  `tree.select`, `neighbours`, `within`, `siblings` ...) draws its leaves as
+  wire cubes at their real size, coloured by cell size as in
+  `show_octree(style="wire")`, with the buildings drawn lightly around.
+  `show_octree(tree, style="wire", cells={"building": g, "neighbours":
+  g.neighbours(steps=1)})` draws several groups in one view, one colour per
+  group, with a legend. A selection can also be a mask over the leaves or
+  leaf numbers. Past `max_cells` cubes (15,000) the most numerous sizes are
+  thinned evenly and the legend says how many are drawn. Same frame as `show_octree`, so the views line up.
+  `octreecity.viz.show_selection` is the function behind both.
+
 ## 0.4.0
 
 Object ids: every voxel and every cell can say which object it belongs to,

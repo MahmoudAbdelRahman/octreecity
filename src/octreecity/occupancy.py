@@ -32,7 +32,7 @@ import numpy as np
 
 from . import _io
 from .classes import EMPTY, Classes
-from .octree import LinearOctree
+from .octree import LinearOctree  # noqa: F401  (kept for older code)
 
 NONE = -1
 

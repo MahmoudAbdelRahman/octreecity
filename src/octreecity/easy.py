@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 import shapely
 
-from . import urban
+from . import urban  # noqa: F401  (kept for older code)
 from .builder import CityBuilder
 
 from .urban import BUILDING, GRASS, PAVEMENT, ROAD, WATER
@@ -180,10 +180,10 @@ def osm_builder(osm, x0, y0, width, depth, cell=1.0, buildings=None, default_hei
         if m.any():
             b.add_landcover(osm.geoms[m], lab)
     # ------------------------------------- waterways, paths, roads (one kind)
-    ww = land & ~poly & np.array([t.get("waterway") in ("stream", "river", "canal", "ditch") for t in tags])
-    hw = land & np.array([t.get("highway") in ROAD_WIDTH or t.get("highway") in PATH_WIDTH for t in tags])
+    ww = land & ~poly & np.array([t.get("waterway") in ("stream", "river", "canal", "ditch") for t in tags], bool)
+    hw = land & np.array([t.get("highway") in ROAD_WIDTH or t.get("highway") in PATH_WIDTH for t in tags], bool)
     hw &= np.array([g.geom_type in ("LineString", "MultiLineString", "Polygon", "MultiPolygon")
-                    for g in osm.geoms])
+                    for g in osm.geoms], bool)
     if ww.any() or hw.any():
         wi, hi = np.nonzero(ww)[0], np.nonzero(hw)[0]
         is_path = np.array([tags[i]["highway"] in PATH_WIDTH for i in hi], bool)
@@ -206,11 +206,11 @@ def osm_builder(osm, x0, y0, width, depth, cell=1.0, buildings=None, default_hei
                          line_width=width[~flat], overlap=overlap)
 
     # ------------------------------------------------------------- trees
-    woods = land & poly & np.array([t.get("natural") == "wood" or t.get("landuse") == "forest" for t in tags])
+    woods = land & poly & np.array([t.get("natural") == "wood" or t.get("landuse") == "forest" for t in tags], bool)
     if woods.any():
         b.add_trees(osm.geoms[woods], top=tree_height, base=0.3 * tree_height)
-    single = land & np.array([t.get("natural") == "tree" for t in tags]) & np.array(
-        [g.geom_type == "Point" for g in osm.geoms])
+    single = land & np.array([t.get("natural") == "tree" for t in tags], bool) & np.array(
+        [g.geom_type == "Point" for g in osm.geoms], bool)
     if single.any():
         si = np.nonzero(single)[0]
         b.add_trees(osm.geoms[si], top=0.75 * tree_height, base=2.5, line_width=6.0,

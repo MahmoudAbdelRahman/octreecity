@@ -119,6 +119,7 @@ class CityBuilder:
         self.x0, self.y0, self.cell = float(x0), float(y0), float(cell)
         self.nx, self.ny = int(round(width / cell)), int(round(depth / cell))
         self.terrain = np.zeros((self.nx, self.ny))
+        self._terrain_fn = None
         self.objects = ObjectTable() if objects is None else objects
         self.crs = crs
         self.ops = []
@@ -131,7 +132,11 @@ class CityBuilder:
         return np.meshgrid(xs, ys, indexing="ij")
 
     def add_terrain(self, dem):
-        """dem: [nx, ny] raster of ground elevation (m) or callable(x, y)."""
+        """dem: [nx, ny] raster of ground elevation (m) or callable(x, y).
+        For tiles, give a callable: a building that crosses the tile edge
+        then gets the same base in every tile (the lowest terrain under its
+        whole footprint)."""
+        self._terrain_fn = dem if callable(dem) else None
         self.terrain = np.asarray(dem(*self.centres()) if callable(dem) else dem, np.float64)
         return self
 
@@ -162,7 +167,7 @@ class CityBuilder:
         o = np.lexsort((key[f], col))                   # by column, the winner last
         lab = None if label is None else np.broadcast_to(np.asarray(label, np.uint8), (n,))
         self.ops.append(dict(kind=kind, f=f[o], col=col[o], ids=ids, label=lab, layer=layer,
-                             overlap=overlap, n=n, index=len(self.ops), **z))
+                             overlap=overlap, n=n, index=len(self.ops), geoms=geoms, **z))
         return self
 
     def add_shapes(self, feats, label, bottom, top, ids=None, layer="id", overlap="keep",
@@ -245,17 +250,42 @@ class CityBuilder:
         if op["ground"] == "building":
             low = np.full(op["n"], np.inf)
             np.minimum.at(low, f, t)
+            if self._terrain_fn is not None:
+                low = self._lowest_terrain(op, low)
             base = np.where(np.isfinite(op["base"][f]), op["base"][f], low[f])
             t = np.minimum(base, t)
         return (t + op["bottom"][f] - z0) / c, (t + op["top"][f] - z0) / c
 
-    def build(self, air_above=20.0, ground_thickness=None, nz=None, strip=16, prune=True):
+    def _lowest_terrain(self, op, low):
+        """Lowest terrain under each footprint that leaves the box, from the
+        terrain function on the same grid of cell centres (so it does not
+        depend on where the box is cut)."""
+        c = self.cell
+        edge = np.zeros(op["n"], bool)
+        f, col = op["f"], op["col"]
+        i, j = np.divmod(col, self.ny)
+        edge[f[(i == 0) | (j == 0) | (i == self.nx - 1) | (j == self.ny - 1)]] = True
+        for k in np.nonzero(edge)[0]:
+            g = op["geoms"][k]
+            bx0, by0, bx1, by1 = g.bounds
+            i0, i1 = int(np.floor((bx0 - self.x0) / c - 0.5)), int(np.ceil((bx1 - self.x0) / c + 0.5))
+            j0, j1 = int(np.floor((by0 - self.y0) / c - 0.5)), int(np.ceil((by1 - self.y0) / c + 0.5))
+            ff, cc = footprint_pairs([g], self.x0 + i0 * c, self.y0 + j0 * c, i1 - i0, j1 - j0, c)
+            if cc.size:
+                ii, jj = np.divmod(cc, j1 - j0)
+                x = self.x0 + (ii + i0 + 0.5) * c
+                y = self.y0 + (jj + j0 + 0.5) * c
+                low[k] = float(np.min(self._terrain_fn(x, y)))
+        return low
+
+    def build(self, air_above=20.0, ground_thickness=None, nz=None, strip=16, prune=True, z0=None):
         """Occupancy with city.ids (one int64 per run per id layer) and
         city.objects. z = 0 is one ground_thickness (default one cell) below
-        the lowest terrain point; the box reaches air_above over the top."""
+        the lowest terrain point, or at z0 (metres) if given: give tiles the
+        same z0 and nz to join them. The box reaches air_above over the top."""
         c = self.cell
         gt = c if ground_thickness is None else float(ground_thickness)
-        z0 = float(self.terrain.min() - gt)
+        z0 = float(self.terrain.min() - gt) if z0 is None else float(z0)
         for op in self.ops:
             op["zb"], op["zt"] = self._z_ranges(op, z0)
         tops = [np.nanmax(op["zt"]) for op in self.ops if op["kind"] in ("solid", "raster")

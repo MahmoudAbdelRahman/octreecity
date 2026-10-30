@@ -303,8 +303,10 @@ class SparseSource(Source):
         x, y, z = (np.asarray(v, np.int64) for v in (x, y, z))
         attrs = dict(attrs or {})
         self.categorical = {}
-        for k, v in (ids or {}).items():
-            self.categorical[k], attrs[k] = _codes(v)
+        for k, v in (ids or {}).items():          # code 0 = -1: the empty voxels have no object
+            v = np.asarray(v, np.int64)
+            u = np.unique(np.r_[np.int64(-1), v])
+            self.categorical[k], attrs[k] = u, np.searchsorted(u, v).astype(np.float64)
         code = morton.encode(x, y, z)
         order = np.argsort(code, kind="stable")
         self.code = code[order]
@@ -406,6 +408,10 @@ class SparseSource(Source):
                 st[:, 3] = np.fmin.reduceat(vp, idx)[::2]
                 st[:, 4] = np.fmax.reduceat(vp, idx)[::2]
             st[st[:, 0] == 0, 3:] = np.nan
+            if k in self.categorical:                # empty voxels hold -1 (code 0)
+                part = st[:, 0] < float(s) ** 3
+                st[part, 3] = 0.0
+                st[part, 4] = np.where(np.isnan(st[part, 4]), 0.0, st[part, 4])
             out.stats[k] = st
         return self._fill_empty(out, s)
 

@@ -139,17 +139,47 @@ def test_edit_then_compact(tmp_path):
     with pytest.raises(ValueError):
         s.add_objects(bad)
     assert Store.open(s.path).manifest["generation"] == gen
-    # rewrite a tile: the old files become garbage
+    # rewrite a tile: its old files and old rows become garbage
     occ, tree, objs = tile_job(s, 0, 0)
     s.write_tile(0, 0, occ, tree, objs)
     n_files = len(list((tmp_path / "e.octreecity").rglob("*.npz")))
+    s.edit_objects(edit)                                  # a second edit part, merged by compact
     removed = s.compact(min_age_s=0)
     after = Store.open(s.path)
-    assert removed > 0 and len(after.manifest["objects"]) == 1
+    modes = sorted((p.get("mode"), bool(p.get("tile"))) for p in after.manifest["objects"])
+    assert removed > 0 and modes == [("add", True), ("add", True), ("edit", False)]
     assert len(list((tmp_path / "e.octreecity").rglob("*.npz"))) == n_files - 2
     assert after.objects().get(bid)["name"] == "renamed" and after.objects().get(bid)["height_m"] == 99.0
-    assert len(list((tmp_path / "e.octreecity").rglob("*.parquet"))) == 1 <= files_before
+    assert len(list((tmp_path / "e.octreecity").rglob("*.parquet"))) == 3 <= files_before + 1
     assert same_occupancy(after.read_tile(0, 0), occ)
+    # the edit stays in force after compact when the tile is written again from the source
+    occ, tree, objs = tile_job(after, 0, 0)
+    after.write_tile(0, 0, occ, tree, objs)
+    assert Store.open(s.path).objects().get(bid)["height_m"] == 99.0
+
+
+def test_rewriting_a_tile_with_new_source_values(tmp_path):
+    s = Store.create(tmp_path / "r.octreecity", 1.0, 4, 64)
+    occ, tree, objs = tile_job(s, 0, 0)
+    s.write_tile(0, 0, occ, tree, objs)
+    i = objs.select(cls="building")[0]
+    changed = objs.copy()
+    changed.set(i, "height_m", 123.0)                     # the source data changed
+    s.write_tile(0, 0, occ, tree, changed)
+    assert Store.open(s.path).objects().get(i)["height_m"] == 123.0
+    s.delete_tile(0, 0)
+    assert i not in Store.open(s.path).objects()          # the tile's rows go with it
+
+
+def test_conflicting_adds_from_two_writers(tmp_path):
+    s = Store.create(tmp_path / "c.octreecity")
+    a, b = ObjectTable(), ObjectTable()
+    a.add("d", ["x"], "thing", v=1.0)
+    b.add("d", ["x"], "thing", v=2.0)
+    s.add_objects(a)
+    with pytest.raises(ValueError):
+        Store.open(s.path).add_objects(b)                 # checked under the lock
+    assert Store.open(s.path).objects().get(a.ids[0])["v"] == 1.0
 
 
 def test_crash_before_manifest_swap_keeps_old_state(tmp_path):

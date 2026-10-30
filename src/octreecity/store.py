@@ -31,12 +31,14 @@ size is free but rounds up to a multiple of the biggest cell, so tile
 edges fall on the root cubes of every tile's octree, and the tiles joined
 give the same octree as one build of the whole area.
 
-Object parts: write_tile and add_objects add a part whose rows must agree
-with the rows already there (the same object seen by two tiles is one
-row); edit_objects adds a part whose values replace the old ones. On
+Object parts: each tile has its own part (writing the tile again replaces
+it; deleting the tile removes it). add_objects adds a part whose rows must
+agree with the rows already there (the same object seen by two tiles is
+one row); edit_objects adds a part whose values replace the old ones. On
 reading, the added parts are merged first, then the edits in order, so an
-edit stays in force when a tile is written again from the source data;
-compact() merges all parts into one (the edits then become plain rows).
+edit stays in force when a tile is written again from the source data.
+compact() merges the parts that do not belong to a tile and deletes old
+files.
 """
 
 import json
@@ -205,12 +207,17 @@ class Store:
         return t
 
     def objects(self):
-        """The whole object table (parts merged in manifest order)."""
+        """The whole object table: the added parts first, then the edits
+        in order (edits win)."""
         if self._objects is not None and self._objects_gen == self._m["generation"]:
             return self._objects
+        self._objects, self._objects_gen = self._table(self._m), self._m["generation"]
+        return self._objects
+
+    def _table(self, m):
         out = ObjectTable()
-        parts = ([p for p in self._m["objects"] if p.get("mode") != "edit"]
-                 + [p for p in self._m["objects"] if p.get("mode") == "edit"])
+        parts = ([p for p in m["objects"] if p.get("mode") != "edit"]
+                 + [p for p in m["objects"] if p.get("mode") == "edit"])
         for part in parts:
             f = self._open(part["file"])
             try:
@@ -218,11 +225,14 @@ class Store:
             finally:
                 if hasattr(f, "close"):
                     f.close()
-            out.merge(ObjectTable.from_bytes(data),
-                      on_conflict="replace" if part.get("mode") == "edit" else "error")
-        for k, v in self._m.get("columns", {}).items():
+            try:
+                out.merge(ObjectTable.from_bytes(data),
+                          on_conflict="replace" if part.get("mode") == "edit" else "error")
+            except ValueError as e:
+                where = f"tile {part['tile']}" if part.get("tile") else part["file"]
+                raise type(e)(f"{self.path}: the objects of {where} disagree with other parts: {e}") from e
+        for k, v in m.get("columns", {}).items():
             out.info.setdefault(k, {}).update(v)
-        self._objects, self._objects_gen = out, self._m["generation"]
         return out
 
     def region(self, i0, j0, i1, j1, objects=True):
@@ -293,8 +303,11 @@ class Store:
             e["leaves"] = int(tree.n_leaves)
             tree.save(self.path / e["octree"], objects=False, meta=meta)
         part = self._write_part(objects, "add") if objects is not None and len(objects) else None
+        if part:
+            part["tile"] = [i, j]
 
         def change(m):
+            _drop_tile_part(m, i, j)                  # the tile's old rows go with its old version
             m["tiles"][f"{i}_{j}"] = e
             m["layers"] = list(dict.fromkeys(m["layers"] + e["layers"]))
             if part:
@@ -309,19 +322,21 @@ class Store:
         return {"file": name, "mode": mode, "rows": len(objects)}
 
     def add_objects(self, objects):
-        """Add rows to the table (they must agree with the rows there)."""
+        """Add rows to the table (they must agree with the rows there:
+        ValueError, and nothing changes, if they do not)."""
         self._need_write()
         part = self._write_part(objects, "add")
-        self._check_merge(part)
 
         def change(m):
             m["objects"].append(part)
+            self._table(m)                            # checked under the lock, before the swap
             _add_columns(m, objects)
         self._commit(change)
 
     def edit_objects(self, objects):
         """Change rows: the given rows' values replace the old ones (new
-        rows are added). Ids never change; nothing is reused."""
+        rows are added). Edits stay in force when a tile is written again
+        and after compact(). Ids never change; nothing is reused."""
         self._need_write()
         part = self._write_part(objects, "edit")
 
@@ -330,14 +345,14 @@ class Store:
             _add_columns(m, objects)
         self._commit(change)
 
-    def _check_merge(self, part):
-        """Fail early (before the manifest swap) if a part conflicts."""
-        t = self.reload().objects().copy()
-        t.merge(ObjectTable.load(self.path / part["file"]))
-
     def delete_tile(self, i, j):
+        """Remove tile (i, j) and the object rows it added."""
         self._need_write()
-        self._commit(lambda m: m["tiles"].pop(f"{i}_{j}", None))
+
+        def change(m):
+            _drop_tile_part(m, i, j)
+            m["tiles"].pop(f"{i}_{j}", None)
+        self._commit(change)
 
     def build(self, func, tiles, workers=1, **kw):
         """Build tiles with func(store, i, j, **kw) -> (occupancy, tree,
@@ -359,20 +374,32 @@ class Store:
         self.reload()
         return tiles
 
-    def compact(self, min_age_s=60.0):
-        """Merge the object parts into one and delete files the manifest
-        no longer lists (older than min_age_s, so files another writer is
-        about to commit are left alone)."""
+    def compact(self, min_age_s=600.0):
+        """Merge the object parts that do not belong to a tile into one
+        (added rows) and one (edits), and delete files the manifest no
+        longer lists that are older than min_age_s (so files another writer
+        is about to commit are left alone; keep it above the lock wait of
+        120 s). Each tile keeps its own part, so it can still be written
+        again, and edits stay edits."""
         self._need_write()
         self.reload()
-        table = self.objects()
-        part = self._write_part(table, "add") if len(table) else None
-        old_parts = [p["file"] for p in self._m["objects"]]
+        m0 = self._m
+        loose = [p for p in m0["objects"] if not p.get("tile")]
+        new = []
+        for mode in ("add", "edit"):
+            ps = [p for p in loose if p.get("mode", "add") == mode]
+            if len(ps) <= 1:
+                new += ps
+                continue
+            t = self._table({"objects": [dict(p, mode="add") for p in ps[:1]] +
+                                        [dict(p, mode="edit") for p in ps[1:]]} if mode == "edit"
+                            else {"objects": ps})
+            new.append(self._write_part(t, mode))
+        merged = {p["file"] for p in loose}
 
         def change(m):
-            # parts added by others since we read stay after ours
-            later = [p for p in m["objects"] if p["file"] not in old_parts]
-            m["objects"] = ([part] if part else []) + later
+            keep = [p for p in m["objects"] if p.get("tile") or p["file"] not in merged]
+            m["objects"] = new + keep
         self._commit(change)
         live = set(self._live_files())
         now = time.time()
@@ -450,6 +477,10 @@ class Store:
                 lock.unlink()
             except FileNotFoundError:
                 pass
+
+
+def _drop_tile_part(m, i, j):
+    m["objects"] = [p for p in m["objects"] if p.get("tile") != [i, j]]
 
 
 def _add_columns(m, objects):

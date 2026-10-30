@@ -276,7 +276,8 @@ class Query:
 class CellView:
     """Per-leaf columns by name: label, class, level, size_m, x, y, z
     (leaf centre, metres), any tree.cells column; object(column, layer)
-    gives an object-table column per leaf (NaN / None where no object)."""
+    gives an object-table column per leaf (where a leaf has no object:
+    -1 for integer columns such as parent, NaN for numbers, None else)."""
 
     def __init__(self, q, idx=None):
         self.q, self.idx = q, idx
@@ -308,12 +309,14 @@ class CellView:
         objs = self.q.objects
         r = objs.rows(self[layer])
         col = objs.column(column)
-        if col.dtype == object:
-            out = np.empty(r.size, dtype=object)
-            out[r >= 0] = col[r[r >= 0]]
-            return out
-        out = np.full(r.size, np.nan)
-        out[r >= 0] = col[r[r >= 0]]
+        hit = r >= 0
+        if col.dtype.kind in "iu":                       # ids and integers stay exact: -1 where none
+            out = np.full(r.size, -1, np.int64)
+        elif col.dtype.kind == "f":
+            out = np.full(r.size, np.nan)
+        else:
+            out = np.empty(r.size, dtype=object)          # text, bool, lists: None where none
+        out[hit] = col[r[hit]]
         return out
 
 

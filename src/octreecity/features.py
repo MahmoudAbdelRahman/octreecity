@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import shapely
-from shapely import wkb as _wkb
+from shapely import wkb as _wkb  # noqa: F401
 from shapely.geometry import shape as _shape
 
 GML = "http://www.opengis.net/gml"

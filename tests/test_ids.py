@@ -188,3 +188,31 @@ def test_voxels_of_an_object():
     v = occ.voxels(id=want)
     ref = np.argwhere(ids["id"] == want)
     assert sorted(map(tuple, v.tolist())) == sorted(map(tuple, ref.tolist()))
+
+
+def test_sparse_ids_count_empty_voxels_like_a_grid():
+    lab = np.zeros((4, 4, 4), np.uint8)
+    ids = np.full(lab.shape, -1, np.int64)
+    lab[1, 1, 1], ids[1, 1, 1] = 2, BIG + 1
+    g = build(GridSource(lab, ids={"id": ids}), mixed(), 2, min_level=2)
+    s = build(SparseSource([1], [1], [1], [2], shape=(4, 4, 4), ids={"id": [BIG + 1]}), mixed(), 2, min_level=2)
+    assert g.cells["id"].tolist() == s.cells["id"].tolist() == [MIXED]
+    full = build(SparseSource([1], [1], [1], [2], shape=(4, 4, 4), ids={"id": [BIG + 1]}),
+                 mixed() | changes("id"), 2)
+    assert (full.to_dense("id") == ids).all()
+
+
+def test_object_columns_per_cell_stay_exact():
+    from octreecity.query import Query
+
+    lab, ids = stacked_city(11)
+    occ = Occupancy.from_dense(lab, ids=ids)
+    o = ObjectTable()
+    parent = o.add("test-set", ["p"], "building")[0]
+    for k in range(12):
+        o._add_one(f"test-set:k{k}", "part", parent, (), {}, "error")
+    occ.ids["id"] = np.where(occ.ids["id"] >= 0, o.ids[1 + (occ.ids["id"] - BIG) % 12], -1)
+    tree = occ.to_octree(4)
+    tree.objects = o
+    par = Query(tree).view().object("parent")
+    assert par.dtype == np.int64 and set(np.unique(par).tolist()) <= {-1, int(parent)}

@@ -47,15 +47,18 @@ and one object table keeps everything else about the objects.
   under unique file names, so several processes can write tiles at once and
   a crash leaves the old state readable. `write_tile`, `read_tile`,
   `read_tree`, `region`, `objects`, `add_objects`, `edit_objects` (edits
-  win), `build` (tiles in parallel), `compact`, `snapshot` (a read-only
-  `.zip`). The tile size is free but rounds up to a multiple of the biggest
+  win, also after a tile is rebuilt), `delete_tile`, `build` (tiles in
+  parallel), `compact`, `snapshot` (a read-only `.zip`). Each tile keeps its
+  own object rows: writing a tile again replaces them. The tile size is free but rounds up to a multiple of the biggest
   cell (240 m becomes 256 m at 1 m voxels and max_level 5), so the tiles'
   octrees joined equal one build of the whole area.
 - `CityBuilder`: every `add_*` takes `ids`, `layer` and `overlap` (`"keep"`:
   an overlap row with the claimants as members, the default; `"first"`,
   `"last"`, `"by"` with a priority array or table column). A shape over its
   own ancestor (a part over its building) replaces it. `add_zones` (a second
-  id layer), `add_shapes` (any extrusion above the terrain). `builder.stats`
+  id layer), `add_shapes` (any extrusion above the terrain), `build(z0=...)`
+  so tiles share one z origin; with a terrain function, a building that
+  crosses a tile edge gets the same base in every tile. `builder.stats`
   counts overlap rows and voxels; warnings for heavy overlap (buffers) and
   for later calls that take voxels of earlier objects.
 - `city_from_osm` keeps the OSM type and id of every object, gives ids to

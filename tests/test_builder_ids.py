@@ -53,7 +53,9 @@ def test_stacked_parts_and_shared_walls():
         warnings.simplefilter("error")                          # a part over its building is not a clash
         c = b.build(air_above=5)
     g, lab = c.to_dense(layer="id"), c.to_dense()
-    k = lambda z: int(np.ceil(z - c.origin[2] - 0.5))           # voxel index of height z
+    def k(z):                                                   # voxel index of height z
+        return int(np.ceil(z - c.origin[2] - 0.5))
+
     col = g[12, 12]
     assert (col[k(0.5):k(9.5) + 1] == pid[0]).all()            # the part replaced its building
     assert (col[k(10.5):k(11.5) + 1] == -1).all() and (lab[12, 12, k(10.5):k(11.5) + 1] == AIR).all()
@@ -190,7 +192,9 @@ def test_city_from_osm_stacked_parts_bridges_zones():
     assert all(ids[k] in o for k in ids)
     assert o.parent(ids[2]) == ids[1] and o.parent(ids[3]) == ids[1]
     assert o.parent(ids[8]) == ids[7]                               # park inside residential land use
-    z = lambda k: city.voxels(id=ids[k])[:, 2] * city.voxel_size + city.origin[2] + 0.5
+    def z(k):
+        return city.voxels(id=ids[k])[:, 2] * city.voxel_size + city.origin[2] + 0.5
+
     for k, lo, hi in ((2, 0, 18), (3, 18, 36), (4, 42, 54)):
         zz = z(k)
         assert zz.size and zz.min() > lo and zz.max() < hi and abs(zz.max() - hi) < 1 and abs(zz.min() - lo) < 1
@@ -204,3 +208,28 @@ def test_city_from_osm_stacked_parts_bridges_zones():
     tree = city.to_octree(5)
     nx, ny, nz = city.shape
     assert (tree.to_dense("id")[:nx, :ny, :nz] == city.to_dense(layer="id")).all()
+
+
+def test_tiles_with_terrain_give_the_same_buildings():
+    def dem(x, y):
+        return 0.5 * x
+
+    feats = Features([shapely.box(2, 2, 14, 10)], height=[5.0])
+
+    def area(x0, w):
+        b = CityBuilder(x0, 0, w, 16)
+        b.add_terrain(dem)
+        i = b.objects.add("test", ["a"], "building")
+        b.add_buildings(feats, ids=i)
+        return b.build(nz=24, z0=-1.0)
+
+    whole, right = area(0, 16), area(8, 8)
+    assert (whole.crop_columns(8, 0, 16, 16).to_dense(layer="id") == right.to_dense(layer="id")).all()
+    assert (whole.crop_columns(8, 0, 16, 16).to_dense() == right.to_dense()).all()
+
+
+def test_city_from_osm_with_no_data():
+    from octreecity.easy import city_from_osm
+
+    city = city_from_osm(36.37, 127.3625, 50, osm_json={"elements": []})
+    assert city.shape[:2] == (50, 50)

@@ -10,7 +10,7 @@ internal structure it likes.
 Ready-made sources:
     GridSource     a dense voxel grid of class ids (+ attribute grids):
                    any data already voxelised (scans, simulations, meshes)
-    ColumnSource   a ColumnCity: runs of classes along z per column, so
+    OccupancySource  an Occupancy: runs of classes along z per column, so
                    height maps, LoD1 blocks, canopies over air, bridges and
                    overhangs; answered from the runs, no voxel grid
     SparseSource   occupied voxels only, e.g. from a point cloud
@@ -201,8 +201,8 @@ class GridSource(Source):
 
 # ------------------------------------------------------------------- columns
 
-class ColumnSource(Source):
-    """A ColumnCity (runs of classes along z per column). attrs: {name:
+class OccupancySource(Source):
+    """An Occupancy (runs of classes along z per column). attrs: {name:
     (nx, ny) raster}, a value per column that applies to its non-empty
     voxels (e.g. a building's height or year per footprint pixel)."""
 

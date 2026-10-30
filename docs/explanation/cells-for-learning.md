@@ -37,7 +37,7 @@ is inside, and the count, sum, min and max of each attribute. Three are ready:
 | Source | Holds | Good for |
 |---|---|---|
 | `GridSource` | a full voxel grid of class ids (+ attribute grids) | any data already voxelised: scans, simulations, meshes |
-| `ColumnSource` | runs of classes along each vertical column | height maps, LoD1 blocks, tree canopies over air, bridges, overhangs |
+| `OccupancySource` | runs of classes along each vertical column | height maps, LoD1 blocks, tree canopies over air, bridges, overhangs |
 | `SparseSource` | occupied voxels only | point clouds (`from_points`), 3D polygons such as CityGML LoD2-4 surfaces or mesh faces (`from_surfaces`) |
 
 For anything else (a mesh tested box by box, a database), write a class with

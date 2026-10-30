@@ -9,7 +9,7 @@
     octreecity obj      city.npz -o city.obj [--labels 2]
     octreecity foam     city.npz -o case/ --max-cell 16 [--near 8 --near-cell 1]
 
-Lengths in metres. city.npz is a ColumnCity, city.ocz a tiled city;
+Lengths in metres. city.npz is an Occupancy, city.ocz a tiled city;
 commands that take city.npz also take city.ocz with --region i0 j0 i1 j1.
 """
 
@@ -41,14 +41,14 @@ def _load_features(a):
 
 
 def _load_city(a):
-    from .columns import ColumnCity
+    from .occupancy import Occupancy
     from .tiles import TiledCity
 
     if str(a.city).endswith(".ocz"):
         if not a.region:
             sys.exit("a tiled city needs --region i0 j0 i1 j1")
         return TiledCity(a.city).region(*a.region)
-    city = ColumnCity.load(a.city)
+    city = Occupancy.load(a.city)
     if a.region:                                  # columns i0 j0 i1 j1 of a single city
         i0, j0, i1, j1 = a.region
         c = city.voxel_size
@@ -95,7 +95,7 @@ def main(argv=None):
                        help="i0 j0 i1 j1: tiles of a tiled city (.ocz), or columns of a single city (.npz)")
         q.add_argument("-o", "--out")
 
-    b = sub.add_parser("build", help="one ColumnCity from footprints")
+    b = sub.add_parser("build", help="one Occupancy from footprints")
     inputs(b)
     t = sub.add_parser("tiles", help="tiled city from footprints, in parallel")
     inputs(t)
@@ -154,9 +154,9 @@ def main(argv=None):
             print(f"tiled city: {len(m['tiles']):,} tiles of {m['tile']:g} m at {m['cell']:g} m, "
                   f"origin ({m['x0']:.1f}, {m['y0']:.1f}, {m['z0']:.1f}), CRS {m['crs']}, {runs:,} runs")
         else:
-            from .columns import ColumnCity
+            from .occupancy import Occupancy
 
-            c = ColumnCity.load(a.city)
+            c = Occupancy.load(a.city)
             labs, cnt = np.unique(c.label, return_counts=True)
             print(f"columns {c.shape} at {c.voxel_size:g} m, origin {tuple(round(v, 1) for v in c.origin)}, "
                   f"{c.n_runs:,} runs; runs per label: {dict(zip(labs.tolist(), cnt.tolist()))}")
@@ -202,11 +202,11 @@ def main(argv=None):
         if nx % (1 << L) or ny % (1 << L):
             sys.exit(f"x/y size must be a multiple of max cell ({a.max_cell:g} m)")
         if nz != city.shape[2]:
-            from .columns import ColumnCity
+            from .occupancy import Occupancy
 
             d = city.to_dense()
             d = np.concatenate([d, np.zeros(d.shape[:2] + (nz - d.shape[2],), np.uint8)], 2)
-            city = ColumnCity.from_dense(d, city.voxel_size, city.origin)
+            city = Occupancy.from_dense(d, city.voxel_size, city.origin)
         tree = city.to_octree(L)
         near_level = 0 if a.near_cell is None else int(round(np.log2(a.near_cell / city.voxel_size)))
         solids = [int(v) for v in np.unique(tree.label) if v != AIR]

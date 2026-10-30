@@ -20,12 +20,12 @@ after changing `cell` or `size_m`.
 ## Any city, octree or result
 
 ```python
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.octree import LinearOctree
 import numpy as np
 
 city.save("kaist_city.npz")               # a city (any source)
-city = ColumnCity.load("kaist_city.npz")
+city = Occupancy.load("kaist_city.npz")
 
 cells = city.to_octree(4)
 cells.save("kaist_cells.npz")             # an octree (2 bytes per cell)

@@ -1,6 +1,6 @@
 # File formats
 
-## ColumnCity (`.npz`)
+## Occupancy (`.npz`)
 
 | array | type | meaning |
 |---|---|---|

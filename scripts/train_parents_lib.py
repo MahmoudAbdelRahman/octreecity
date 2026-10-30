@@ -17,12 +17,12 @@ import torch
 
 from octreecity.attention import LinkModel, masked_mse
 from octreecity.build import build
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.fill import from_raster
 from octreecity.learn import Tokens, pixel_map, reach_m, tokens
 from octreecity.links import across, hierarchy, neighbours
 from octreecity.rules import mixed
-from octreecity.sources import ColumnSource
+from octreecity.sources import OccupancySource
 from octreecity.urban import BUILDING
 
 PC = "/Users/mahmoud/Projects/octreecity-paper-code"
@@ -39,9 +39,9 @@ def h2_of(pic):
 
 def tile_tokens(d, pic):
     h2, b = h2_of(pic)
-    city = ColumnCity.from_heightfield(np.zeros_like(h2), h2 / 2, BUILDING, int(math.ceil((h2.max() + 16) / 2)),
+    city = Occupancy.from_heightfield(np.zeros_like(h2), h2 / 2, BUILDING, int(math.ceil((h2.max() + 16) / 2)),
                                        voxel_size=2.0)
-    tree = build(ColumnSource(city), mixed(), 3).balance(6)
+    tree = build(OccupancySource(city), mixed(), 3).balance(6)
     layer = tree.in_box((0, 0, 0), (128, 128, 1))
     tree.cells["building"] = (tree.label == BUILDING).astype(float)
     tree.cells["h30"] = from_raster(tree, np.where(b, h2, 0.0), "max") / 30

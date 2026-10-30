@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 import numpy as np
 
 from octreecity.analysis import shadow, sky_view_factor, street_points, sun_hours, sun_position
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.urban import BUILDING
 
 
@@ -13,11 +13,11 @@ def canyon(W=20, H=20, n=400):
     c = n // 2
     s[:c - W // 2, :] += H
     s[c + W // 2:, :] += H
-    return ColumnCity.from_heightfield(g, s, BUILDING, H + 10)
+    return Occupancy.from_heightfield(g, s, BUILDING, H + 10)
 
 
 def test_open_field_svf_is_one():
-    city = ColumnCity.from_heightfield(np.ones((64, 64)), np.ones((64, 64)), BUILDING, 8)
+    city = Occupancy.from_heightfield(np.ones((64, 64)), np.ones((64, 64)), BUILDING, 8)
     pts = np.array([[32.0, 32.0, 2.5]])
     assert abs(sky_view_factor(city, pts)[0] - 1) < 1e-9
 
@@ -42,7 +42,7 @@ def test_shadow_length():
     g = np.ones((n, n))
     s = g.copy()
     s[:, 100:110] += 30          # wall along x, 30 m tall, at y = 100..110
-    city = ColumnCity.from_heightfield(g, s, BUILDING, 40)
+    city = Occupancy.from_heightfield(g, s, BUILDING, 40)
     y = np.arange(60, 100) + 0.5
     pts = np.stack([np.full_like(y, 50.0), y, np.full_like(y, 1.0)], 1)
     sh = shadow(city, pts, sun_az=0.0, sun_alt=45.0)   # sun due north, wall to the north

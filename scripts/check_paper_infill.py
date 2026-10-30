@@ -15,12 +15,12 @@ import math, pickle, sys
 import numpy as np
 
 from octreecity.build import build
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.fill import from_raster
 from octreecity.learn import pixel_map, tokens
 from octreecity.links import neighbours
 from octreecity.rules import mixed
-from octreecity.sources import ColumnSource
+from octreecity.sources import OccupancySource
 from octreecity.urban import BUILDING
 
 PC = "/Users/mahmoud/Projects/octreecity-paper-code"
@@ -34,9 +34,9 @@ def library_tokens(pic, wx, wy):
     h = pic.astype(np.float64)[::-1, :].T
     b = (h.reshape(128, 2, 128, 2) > 0).mean((1, 3)) >= 0.5
     h2 = np.where(b, h.reshape(128, 2, 128, 2).mean((1, 3)), 0.0)
-    city = ColumnCity.from_heightfield(np.zeros_like(h2), h2 / 2, BUILDING, int(math.ceil((h2.max() + 16) / 2)),
+    city = Occupancy.from_heightfield(np.zeros_like(h2), h2 / 2, BUILDING, int(math.ceil((h2.max() + 16) / 2)),
                                        voxel_size=2.0)
-    tree = build(ColumnSource(city), mixed(), 3).balance(6)
+    tree = build(OccupancySource(city), mixed(), 3).balance(6)
     layer = tree.in_box((0, 0, 0), (128, 128, 1))
     pm = pixel_map(tree, layer)
     hit = np.unique(pm[wx:wx + W, wy:wy + W])

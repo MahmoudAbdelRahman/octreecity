@@ -13,7 +13,7 @@ build_tiled("osaka.ocz", buildings, cell=1.0, tile=256, workers=8,
             landcover=[(parks, 5), (roads, 7, 6.0)])
 
 city = TiledCity("osaka.ocz")
-one = city.tile(40, 46)                    # a ColumnCity
+one = city.tile(40, 46)                    # an Occupancy
 block = city.region(39, 45, 45, 51)        # 6 x 6 tiles stitched, missing tiles = air
 i, j = city.index_of(x, y)                 # which tile holds the point (x, y), in metres
 ```

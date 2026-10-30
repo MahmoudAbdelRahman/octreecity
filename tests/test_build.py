@@ -3,10 +3,10 @@ import pytest
 
 from octreecity.build import build, uniform
 from octreecity.classes import Classes
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.octree import LinearOctree
 from octreecity.rules import changes, larger_than, mixed, varies, where
-from octreecity.sources import ColumnSource, GridSource, SparseSource
+from octreecity.sources import GridSource, OccupancySource, SparseSource
 
 
 def random_columns(seed=0, n=40, nz=24):
@@ -14,7 +14,7 @@ def random_columns(seed=0, n=40, nz=24):
     g = rng.integers(0, 3, (n, n)).astype(float)
     s = g + np.where(rng.random((n, n)) < 0.3, rng.integers(1, 15, (n, n)), 0)
     lab = rng.integers(2, 4, (n, n))
-    city = ColumnCity.from_heightfield(g, s, lab, nz)
+    city = Occupancy.from_heightfield(g, s, lab, nz)
     h = np.where(s > g, s - g, np.nan)
     return city, h
 
@@ -23,7 +23,7 @@ def three_sources(city, h):
     d = city.to_dense()
     hg = np.where(d != 0, np.repeat(h[..., None], d.shape[2], 2), np.nan)
     X, Y, Z = np.nonzero(d)
-    return (ColumnSource(city, attrs={"h": h}),
+    return (OccupancySource(city, attrs={"h": h}),
             GridSource(d, attrs={"h": hg}),
             SparseSource(X, Y, Z, d[X, Y, Z], attrs={"h": hg[X, Y, Z]}, shape=d.shape))
 
@@ -75,9 +75,9 @@ def test_rules_semantic_depth_and_attributes():
 
 def test_uniform_and_padding():
     city, h = random_columns(2, n=20, nz=10)
-    u = uniform(ColumnSource(city), 1)
+    u = uniform(OccupancySource(city), 1)
     assert (u.level == 1).all() and u.shape == (20, 20, 10) and u.check()
-    t = build(ColumnSource(city), mixed(), 3, min_level=1)
+    t = build(OccupancySource(city), mixed(), 3, min_level=1)
     assert t.level.min() == 1 and t.shape == (24, 24, 16) and t.check()
 
 

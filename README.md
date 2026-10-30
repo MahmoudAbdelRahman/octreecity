@@ -205,11 +205,11 @@ everything exports as arrays ready for PyTorch:
 ```python
 from octreecity.build import build
 from octreecity.rules import mixed, varies
-from octreecity.sources import ColumnSource
+from octreecity.sources import OccupancySource
 from octreecity.links import neighbours, hierarchy
 from octreecity.learn import tokens
 
-src = ColumnSource(city, attrs={"height": heights})        # a value per column
+src = OccupancySource(city, attrs={"height": heights})        # a value per column
 tree = build(src, mixed() | varies("height", 3.0), max_level=5)
 p = tree.parents()
 tok = tokens(tree, ["size_m"], neighbours(tree) | hierarchy(tree, p), parents=p, k=16)
@@ -240,7 +240,7 @@ existing tools:
 - [VoxCity](https://github.com/kunifujiwara/VoxCity) generates grid-based 3D
   city models from global open data and runs urban simulations on them. Any
   dense voxel grid, such as a VoxCity model with its classes mapped to
-  OctreeCity labels, can be loaded with `ColumnCity.from_dense`.
+  OctreeCity labels, can be loaded with `Occupancy.from_dense`.
 - [OpenVDB](https://www.openvdb.org/) and sparse voxel octrees in computer
   graphics, for sparse and hierarchical volumes.
 - Adaptive mesh refinement in CFD (for example OpenFOAM and Basilisk), which

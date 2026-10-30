@@ -5,7 +5,7 @@ Core (no domain words):
 | Module | What it contains |
 |---|---|
 | `octreecity.classes` | `Classes`: the tree of class names (semantic structure), `EMPTY` |
-| `octreecity.sources` | `GridSource`, `ColumnSource`, `SparseSource` (`from_points`, `from_surfaces`), `Source`, `Summary` |
+| `octreecity.sources` | `GridSource`, `OccupancySource`, `SparseSource` (`from_points`, `from_surfaces`), `Source`, `Summary` |
 | `octreecity.build` | `build(source, rule, max_level, min_level)`, `uniform(source, level)` |
 | `octreecity.rules` | `mixed`, `varies`, `changes`, `larger_than`, `where`, `never`; combine with `\|` `&` `~` |
 | `octreecity.octree` | `LinearOctree`: cell table (`label`, `cells`, `series`, `add_snapshot`), `parents`, `in_box`, `balance`, `refine_where` |
@@ -23,7 +23,7 @@ City tools (use the `octreecity.urban` preset of class names):
 | `octreecity.easy` | `city_from_osm(lat, lon, size_m)`: one call, any place, data from OpenStreetMap |
 | `octreecity.features` | `read_citygml` (footprints), `read_citygml_surfaces` (3D surfaces with their kind), `read_geojson`, `read_osm_overpass`, `Features`, `Surfaces`, `reproject` |
 | `octreecity.builder` | `CityBuilder`: terrain, land cover, trees, buildings; `rasterize` |
-| `octreecity.columns` | `ColumnCity`: the storage format, `crop`, `to_octree`, `to_dense`, `save` / `load` |
+| `octreecity.occupancy` | `Occupancy`: the storage format, `crop`, `to_octree`, `to_dense`, `save` / `load` |
 | `octreecity.tiles` | `build_tiled`, `TiledCity` (`tile`, `region`), `TiledCityWriter` |
 | `octreecity.city` | `build_city(heights, pixel_size, min_cell, max_cell)` |
 | `octreecity.adapt` | `adapt`, `sample`, `transfer`, `jump_indicator` (split and merge by a field, CFD style) |
@@ -34,4 +34,4 @@ City tools (use the `octreecity.urban` preset of class names):
 | `octreecity.foam` | `build_polymesh`, `check_polymesh`, `write_polymesh` (OpenFOAM) |
 | `octreecity.cli` | the `octreecity` command |
 
-Every function has a docstring: `help(octreecity.columns.ColumnCity)` in Python.
+Every function has a docstring: `help(octreecity.occupancy.Occupancy)` in Python.

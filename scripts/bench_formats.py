@@ -13,7 +13,7 @@ import numpy as np
 from octreecity import LinearOctree, pad_to_multiple, rasterize_columns
 
 from octreecity.urban import BUILDING
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 
 SRC = Path.home() / "Projects/urban_wind/data/cities/osaka/height_pictures.npz"
 
@@ -42,7 +42,7 @@ for i in pick:
     g = np.ones_like(h)
     s = g + np.where(h > 0, h, 0)
     nz = pad_to_multiple(1 + h.max() + 16, 5)
-    col, tc = timed(lambda: ColumnCity.from_heightfield(g, s, BUILDING, nz))
+    col, tc = timed(lambda: Occupancy.from_heightfield(g, s, BUILDING, nz))
     oct_, to = timed(lambda: LinearOctree.from_heightfield(g, s, BUILDING, nz, 5))
     _, tco = timed(lambda: col.to_octree(5))
     grid = rasterize_columns(g, s, BUILDING, nz)

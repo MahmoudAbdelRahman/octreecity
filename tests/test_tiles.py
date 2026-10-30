@@ -3,7 +3,7 @@ import numpy as np
 from octreecity import rasterize_columns
 
 from octreecity.urban import BUILDING
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.tiles import TiledCity, TiledCityWriter
 
 
@@ -12,7 +12,7 @@ def tile_city(seed, n=16, nz=None):
     g = np.ones((n, n))
     s = g + np.where(rng.random((n, n)) < 0.3, rng.uniform(2, 20, (n, n)), 0)
     nz = nz or int(s.max()) + 3
-    return ColumnCity.from_heightfield(g, s, BUILDING, nz), (g, s)
+    return Occupancy.from_heightfield(g, s, BUILDING, nz), (g, s)
 
 
 def test_roundtrip_and_region(tmp_path):

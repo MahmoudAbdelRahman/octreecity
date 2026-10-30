@@ -1,13 +1,13 @@
 import numpy as np
 
 from octreecity.cli import main
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 
 
 def test_info_render_svf_with_region(tmp_path, capsys):
     rng = np.random.default_rng(0)
     h = np.where(rng.random((40, 40)) < 0.2, rng.integers(3, 20, (40, 40)), 0).astype(float)
-    city = ColumnCity.from_heightfield(np.zeros_like(h) + 1, h + 1, 2, 30)
+    city = Occupancy.from_heightfield(np.zeros_like(h) + 1, h + 1, 2, 30)
     path = tmp_path / "c.npz"
     city.save(path)
     main(["info", str(path)])

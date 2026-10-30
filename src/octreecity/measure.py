@@ -1,7 +1,7 @@
 """Measurements: what adaptive cells cost against a uniform grid.
 
     from octreecity.measure import growth, table
-    rows = growth(ColumnSource(city), mixed(), max_level=6, min_levels=[4, 3, 2, 1, 0])
+    rows = growth(OccupancySource(city), mixed(), max_level=6, min_levels=[4, 3, 2, 1, 0])
     print(table(rows))
 
 For each smallest cell size, the same source is built two ways: the

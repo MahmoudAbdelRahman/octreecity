@@ -52,9 +52,11 @@ show_octree(tree, style="wire", cells={"building": g,                       # on
 
 The views use the frame of `show_octree`, so they line up with it. A group
 can also be a mask over the leaves (`tree.label == BUILDING`) or a list of
-leaf numbers. Past `max_cells` cubes (40,000) the smallest sizes are left
-out and named in the legend, so big selections stay quick; select a smaller
-area to see every cell. `context=()` leaves out the buildings around.
+leaf numbers. Past `max_cells` cubes (15,000) the most numerous sizes are
+thinned evenly (every k-th cell, spread over the whole selection) and the
+legend says how many are drawn, so big selections stay quick and keep their
+shape; select a smaller area to see every cell. `context=()` leaves out the
+buildings around.
 
 Big areas are simplified for display only (`step`, chosen automatically to
 keep views quick); the data is not changed. Save a view as a web page with

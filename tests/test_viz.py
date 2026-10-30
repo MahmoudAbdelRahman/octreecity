@@ -134,13 +134,19 @@ def test_several_groups_one_colour_each():
     assert show_octree(t, cells=np.zeros(0, int)).layout.title.text == "No cells selected"
 
 
-def test_big_selection_is_thinned_with_a_note():
+def test_big_selection_is_thinned_evenly_with_a_note():
     t, ids = selection_tree()
     g = t.select(where=lambda c: c["label"] == 0)
-    f = g.show(max_cells=len(g) // 4)
+    cap = len(g) // 4
+    f = g.show(max_cells=cap)
     names = wire_names(f)
-    assert any("hidden" in n for n in names)
+    assert any("drawn (evenly spread)" in n for n in names)
+    sizes = {n for n in names if n.endswith("m cells")}
+    assert len(sizes) == len(np.unique(t.level[g.idx]))      # every size still shows
+    edges = sum(len([x for x in tr.x if x is None]) for tr in f.data
+                if tr.type == "scatter3d" and tr.name.endswith("m cells"))
+    assert edges <= 12 * cap
     from octreecity.viz import show_octree
 
-    f2 = show_octree(t, cells={"air": g}, max_cells=len(g) // 4)
-    assert "drawn)" in wire_names(f2)[0] and any("hidden" in n for n in wire_names(f2))
+    f2 = show_octree(t, cells={"air": g}, max_cells=cap)
+    assert "drawn)" in wire_names(f2)[0] and any("evenly" in n for n in wire_names(f2))

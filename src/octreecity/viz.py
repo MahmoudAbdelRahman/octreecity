@@ -313,6 +313,31 @@ def _thin(tree, idx, max_cells):
     return idx, hidden
 
 
+def _thin_evenly(tree, idx, max_cells):
+    """At most max_cells leaves, every size kept: the biggest sizes are
+    drawn in full, the most numerous (smallest) are thinned to every k-th
+    cell in Morton order, which keeps them spread over the whole selection.
+    Returns (kept indices, [(size_m, drawn, of how many), ...])."""
+    idx = np.asarray(idx, np.int64)
+    if idx.size <= max_cells:
+        return idx, []
+    keep, notes, budget = [], [], int(max_cells)
+    levels = sorted(np.unique(tree.level[idx]), reverse=True)
+    for k, L in enumerate(levels):
+        m = idx[tree.level[idx] == L]
+        share = budget // (len(levels) - k)                 # what is left, shared by the sizes left
+        if m.size <= share:
+            keep.append(m)
+            budget -= m.size
+            continue
+        step = -(-m.size // max(share, 1))
+        t = m[::step]
+        keep.append(t)
+        budget -= t.size
+        notes.append(((1 << int(L)) * tree.voxel_size, int(t.size), int(m.size)))
+    return np.sort(np.concatenate(keep)), notes
+
+
 def _hidden_note(name):
     import plotly.graph_objects as go
 
@@ -346,7 +371,7 @@ def _context(tree, labels, opacity):
     return traces
 
 
-def show_selection(tree, cells, title=None, height=700, max_cells=40_000, context=(BUILDING, TREE),
+def show_selection(tree, cells, title=None, height=700, max_cells=15_000, context=(BUILDING, TREE),
                    context_opacity=0.25):
     """Any selection of leaves drawn as wire cubes at their real size, in the
     frame of show_octree, with the tree's buildings and trees drawn lightly
@@ -356,8 +381,10 @@ def show_selection(tree, cells, title=None, height=700, max_cells=40_000, contex
         siblings ..., a bool mask over the leaves, or leaf indices): cubes
         coloured by cell size, as in show_octree(style="wire");
         or {name: selection}: one colour per name, with a legend.
-    max_cells: past this many cubes the smallest sizes are left out (and
-        named in the legend) so the view stays responsive.
+    max_cells: at most this many cubes (15,000: a figure of about 9 MB), so
+        the view stays responsive. Past it every size is still drawn: the most numerous sizes are thinned
+        evenly (every k-th cell in Morton order, spread over the whole
+        selection), and the legend says how many are drawn.
     context: labels drawn around the selection (() for none).
     """
     import plotly.graph_objects as go
@@ -366,7 +393,7 @@ def show_selection(tree, cells, title=None, height=700, max_cells=40_000, contex
     groups = cells if named else {"cells": cells}
     idx = {k: _leaf_index(tree, v) for k, v in groups.items()}
     every = np.unique(np.concatenate([v for v in idx.values()] or [np.zeros(0, np.int64)]))
-    keep, hidden = _thin(tree, every, max_cells)
+    keep, thinned = _thin_evenly(tree, every, max_cells)
     traces = []
     if named:
         for k, (name, ix) in enumerate(idx.items()):
@@ -383,8 +410,8 @@ def show_selection(tree, cells, title=None, height=700, max_cells=40_000, contex
             traces.append(_edge_trace(_cube_segments(tree, m), f"{(1 << int(L)) * tree.voxel_size:g} m cells",
                                       color=_rgba(SIZE_COLORS[int(L) % len(SIZE_COLORS)], alpha),
                                       width=2.0 if k == 0 else 1.4))
-    for size, n in hidden:
-        traces.append(_hidden_note(f"{size:g} m cells hidden ({n:,}, too many to draw)"))
+    for size, drawn, n in thinned:
+        traces.append(_hidden_note(f"{size:g} m cells: {drawn:,} of {n:,} drawn (evenly spread)"))
     traces = _context(tree, context, context_opacity) + traces
     fig = go.Figure(traces)
     fig = _layout(fig, Occupancy(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
@@ -394,12 +421,13 @@ def show_selection(tree, cells, title=None, height=700, max_cells=40_000, contex
     return fig
 
 
-def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=40_000, cells=None):
+def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=None, cells=None):
     """3D view of an adaptive octree.
 
     cells: draw only a selection, as wire cubes (see show_selection): a
         Group, a mask or leaf indices (coloured by size), or {name: group}
-        (one colour per name). The style is then "wire".
+        (one colour per name). The style is then "wire", and max_cells
+        thins the selection evenly instead of hiding the smallest sizes.
 
     style="shells": nested see-through envelopes; shell k holds every air
         cell up to 2**k cells wide, so you see where the mesh is fine in 3D.
@@ -408,7 +436,7 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
         cut faces show the cells (coloured by size), buildings stand in the
         rest. cut=(x, y) in metres sets the corner (default: block centre).
     style="wire": every air cell drawn as a wire cube coloured by size,
-        around solid buildings. If there are more than max_cells air cells,
+        around solid buildings. If there are more than max_cells (40,000) air cells,
         the smallest sizes are hidden (and listed in the legend) so the view
         stays responsive; crop a smaller block to see every cell.
     """
@@ -417,7 +445,9 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
     from .exports import surface_quads
 
     if cells is not None:
-        return show_selection(tree, cells, title=title, height=height, max_cells=max_cells)
+        return show_selection(tree, cells, title=title, height=height,
+                              max_cells=15_000 if max_cells is None else max_cells)
+    max_cells = 40_000 if max_cells is None else max_cells
     c = tree.voxel_size
     lev, lab = _level_grid(tree)
     solid = lab != AIR

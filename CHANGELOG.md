@@ -11,8 +11,8 @@
   `show_octree(tree, style="wire", cells={"building": g, "neighbours":
   g.neighbours(steps=1)})` draws several groups in one view, one colour per
   group, with a legend. A selection can also be a mask over the leaves or
-  leaf numbers. Past `max_cells` cubes the smallest sizes are left out and
-  named in the legend. Same frame as `show_octree`, so the views line up.
+  leaf numbers. Past `max_cells` cubes (15,000) the most numerous sizes are
+  thinned evenly and the legend says how many are drawn. Same frame as `show_octree`, so the views line up.
   `octreecity.viz.show_selection` is the function behind both.
 
 ## 0.4.0

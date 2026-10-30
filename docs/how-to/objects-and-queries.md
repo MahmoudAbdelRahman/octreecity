@@ -74,6 +74,11 @@ faces, 18 also through edges, 26 also through corners. On an adaptive tree a
 step into a 32 m cell covers 32 m, so steps are not metres: use `within` for
 metres. `within` measures the gap between cells (0 = touching).
 
+To see a group in 3D: `g.show()` (wire cubes coloured by cell size, the
+buildings around), or several groups in one view with one colour each:
+`show_octree(tree, style="wire", cells={"building": g, "neighbours":
+g.neighbours(steps=1)})`. See [3D views](3d-views.md#any-selection-of-cells).
+
 ## Objects near objects
 
 ```python

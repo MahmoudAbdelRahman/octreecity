@@ -11,7 +11,7 @@ Interactive 3D in Jupyter or VS Code (plotly): drag to rotate, scroll to zoom,
 click a legend entry to hide it.
 
 ```python
-from octreecity.viz import show, show_values, show_cells, show_octree, street_map
+from octreecity.viz import show, show_values, show_cells, show_octree, show_selection, street_map
 from octreecity.analysis import street_points, sky_view_factor
 
 show(city)                                       # the city in 3D
@@ -34,6 +34,27 @@ from octreecity.viz import downsample
 small = downsample(city.crop(0, 0, 128, 128), 2).to_octree(3)
 show_octree(small, style="wire")                # every air cell as a wire cube, by size
 ```
+
+## Any selection of cells
+
+Any group of cells (from `tree.select`, `neighbours`, `within`, `siblings`,
+...) draws in the same wire style, at the cells' real size, with the
+buildings drawn lightly around it:
+
+```python
+g = tree.select(id=building_id)
+g.show()                                        # coloured by cell size
+g.neighbours(steps=2).show()
+show_octree(tree, style="wire", cells={"building": g,                       # one colour per group,
+                                       "neighbours": g.neighbours(steps=1),  # with a legend
+                                       "within 10 m": g.within(10.0)})
+```
+
+The views use the frame of `show_octree`, so they line up with it. A group
+can also be a mask over the leaves (`tree.label == BUILDING`) or a list of
+leaf numbers. Past `max_cells` cubes (40,000) the smallest sizes are left
+out and named in the legend, so big selections stay quick; select a smaller
+area to see every cell. `context=()` leaves out the buildings around.
 
 Big areas are simplified for display only (`step`, chosen automatically to
 keep views quick); the data is not changed. Save a view as a web page with

@@ -4,6 +4,8 @@
     show(city)                                  # the city in 3D
     show_values(city, svf_map, "Sky view")      # street-level results on the 3D city
     show_cells(tree, y=300)                     # adaptive cells on a vertical cut
+    tree.select(id=7).show()                    # any selection of cells, as wire cubes
+    show_octree(tree, cells={"building": g, "around": g.neighbours(steps=1)})
 
 Big cities are simplified for display only (cells merged by `step`), so a
 view stays quick; the data itself is untouched.
@@ -275,8 +277,129 @@ def _level_grid(tree):
     return lev, tree.to_dense()
 
 
-def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=40_000):
+GROUP_COLORS = ["#ff6b6b", "#4dabf7", "#ffd43b", "#69db7c", "#da77f2", "#ffa94d", "#3bc9db", "#f783ac"]
+_CUBE = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], float)
+_PAIRS = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
+
+
+def _rgba(color, alpha):
+    rgb = color.lstrip("#")
+    r, g, b = (int(rgb[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha:.2f})"
+
+
+def _cube_segments(tree, idx):
+    """The 12 edges of each leaf in idx, as (12 n, 2, 3) segments in the
+    frame of show_octree: x, y from the tree's corner, z absolute (metres)."""
+    c = tree.voxel_size
+    X, Y, Z = (v[idx] for v in tree.corners())
+    corner = np.stack([X, Y, Z], 1) * c + np.array([0, 0, tree.origin[2]])
+    size = (tree.sizes()[idx] * c)[:, None, None]
+    v = corner[:, None, :] + _CUBE[None] * size
+    return np.stack([v[:, [a, b]] for a, b in _PAIRS], 1).reshape(-1, 2, 3)
+
+
+def _thin(tree, idx, max_cells):
+    """Leave out the smallest cell sizes until at most max_cells remain.
+    Returns (kept indices, [(size_m, how many hidden), ...])."""
+    idx = np.asarray(idx, np.int64)
+    hidden = []
+    for L in sorted(np.unique(tree.level[idx])):
+        if idx.size <= max_cells:
+            break
+        m = tree.level[idx] == L
+        hidden.append(((1 << int(L)) * tree.voxel_size, int(m.sum())))
+        idx = idx[~m]
+    return idx, hidden
+
+
+def _hidden_note(name):
+    import plotly.graph_objects as go
+
+    return go.Scatter3d(x=[None], y=[None], z=[None], mode="lines", name=name,
+                        line=dict(color="rgba(150,150,150,0.4)", width=1), hoverinfo="skip")
+
+
+def _leaf_index(tree, cells):
+    """A Group, a bool mask over the leaves or leaf indices -> sorted indices."""
+    if hasattr(cells, "idx"):
+        return np.asarray(cells.idx, np.int64)
+    a = np.asarray(cells)
+    if a.dtype == bool:
+        if a.shape != (tree.n_leaves,):
+            raise ValueError(f"a mask needs one value per leaf ({tree.n_leaves})")
+        return np.nonzero(a)[0]
+    return np.unique(a.astype(np.int64))
+
+
+def _context(tree, labels, opacity):
+    """The tree's solids with these labels, drawn lightly around a selection."""
+    if not labels:
+        return []
+    lab = tree.to_dense()
+    cols = Occupancy.from_dense(lab, tree.voxel_size, (0.0, 0.0, tree.origin[2]))
+    present = [int(v) for v in labels if (cols.label == v).any()]
+    traces = _meshes(cols, present) if present else []
+    for t in traces:
+        t.opacity = opacity
+        t.name = f"{t.name} (context)"
+    return traces
+
+
+def show_selection(tree, cells, title=None, height=700, max_cells=40_000, context=(BUILDING, TREE),
+                   context_opacity=0.25):
+    """Any selection of leaves drawn as wire cubes at their real size, in the
+    frame of show_octree, with the tree's buildings and trees drawn lightly
+    around for context.
+
+    cells: one selection (a Group from tree.select, neighbours, within,
+        siblings ..., a bool mask over the leaves, or leaf indices): cubes
+        coloured by cell size, as in show_octree(style="wire");
+        or {name: selection}: one colour per name, with a legend.
+    max_cells: past this many cubes the smallest sizes are left out (and
+        named in the legend) so the view stays responsive.
+    context: labels drawn around the selection (() for none).
+    """
+    import plotly.graph_objects as go
+
+    named = isinstance(cells, dict)
+    groups = cells if named else {"cells": cells}
+    idx = {k: _leaf_index(tree, v) for k, v in groups.items()}
+    every = np.unique(np.concatenate([v for v in idx.values()] or [np.zeros(0, np.int64)]))
+    keep, hidden = _thin(tree, every, max_cells)
+    traces = []
+    if named:
+        for k, (name, ix) in enumerate(idx.items()):
+            shown = np.intersect1d(ix, keep)
+            color = GROUP_COLORS[k % len(GROUP_COLORS)]
+            label = f"{name} ({ix.size:,} cells" + (f", {shown.size:,} drawn)" if shown.size < ix.size else ")")
+            traces.append(_edge_trace(_cube_segments(tree, shown), label, color=_rgba(color, 0.9), width=2.0))
+            traces[-1].legendgroup = name
+    else:
+        levels = sorted(np.unique(tree.level[keep]))
+        for k, L in enumerate(levels):
+            m = keep[tree.level[keep] == L]
+            alpha = 0.95 - 0.6 * k / max(1, len(levels) - 1)       # small cells stand out
+            traces.append(_edge_trace(_cube_segments(tree, m), f"{(1 << int(L)) * tree.voxel_size:g} m cells",
+                                      color=_rgba(SIZE_COLORS[int(L) % len(SIZE_COLORS)], alpha),
+                                      width=2.0 if k == 0 else 1.4))
+    for size, n in hidden:
+        traces.append(_hidden_note(f"{size:g} m cells hidden ({n:,}, too many to draw)"))
+    traces = _context(tree, context, context_opacity) + traces
+    fig = go.Figure(traces)
+    fig = _layout(fig, Occupancy(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
+                                  np.zeros(0, np.uint8), tree.voxel_size, tree.origin),
+                  title or (f"{every.size:,} selected cells" if every.size else "No cells selected"), height)
+    fig.update_layout(scene_camera=dict(eye=dict(x=-1.45, y=-1.65, z=0.75)))
+    return fig
+
+
+def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=40_000, cells=None):
     """3D view of an adaptive octree.
+
+    cells: draw only a selection, as wire cubes (see show_selection): a
+        Group, a mask or leaf indices (coloured by size), or {name: group}
+        (one colour per name). The style is then "wire".
 
     style="shells": nested see-through envelopes; shell k holds every air
         cell up to 2**k cells wide, so you see where the mesh is fine in 3D.
@@ -293,41 +416,25 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
 
     from .exports import surface_quads
 
+    if cells is not None:
+        return show_selection(tree, cells, title=title, height=height, max_cells=max_cells)
     c = tree.voxel_size
     lev, lab = _level_grid(tree)
     solid = lab != AIR
     levels = [int(v) for v in np.unique(lev[~solid])]
     traces = []
     if style == "wire":
-        X, Y, Z = tree.corners()
-        S = tree.sizes()
-        air = tree.label == AIR
         # too many cubes to draw: hide the smallest sizes first and say so in the legend
-        hidden = []
-        for L in sorted(np.unique(tree.level[air])):
-            if air.sum() <= max_cells:
-                break
-            m = air & (tree.level == L)
-            hidden.append(((1 << int(L)) * c, int(m.sum())))
-            air = air & ~m
-        cube = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], float)
-        pairs = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
+        air, hidden = _thin(tree, np.nonzero(tree.label == AIR)[0], max_cells)
         levels_air = sorted(np.unique(tree.level[air]))
         for k, L in enumerate(levels_air):
-            m = air & (tree.level == L)
-            corner = np.stack([X[m], Y[m], Z[m]], 1) * c + np.array([0, 0, tree.origin[2]])
-            size = (S[m] * c)[:, None, None]
-            v = corner[:, None, :] + cube[None] * size
-            seg = np.stack([v[:, [a, b]] for a, b in pairs], 1).reshape(-1, 2, 3)
-            rgb = SIZE_COLORS[int(L) % len(SIZE_COLORS)].lstrip("#")
-            r, g, bl = (int(rgb[i:i + 2], 16) for i in (0, 2, 4))
+            m = air[tree.level[air] == L]
             alpha = 0.95 - 0.6 * k / max(1, len(levels_air) - 1)       # big cells fade, small cells stand out
-            traces.append(_edge_trace(seg, f"{(1 << int(L)) * c:g} m cells", color=f"rgba({r},{g},{bl},{alpha:.2f})",
+            traces.append(_edge_trace(_cube_segments(tree, m), f"{(1 << int(L)) * c:g} m cells",
+                                      color=_rgba(SIZE_COLORS[int(L) % len(SIZE_COLORS)], alpha),
                                       width=2.0 if k == 0 else 1.4))
         for size, n in hidden:                       # legend note for sizes left out
-            traces.append(go.Scatter3d(x=[None], y=[None], z=[None], mode="lines",
-                                       name=f"{size:g} m cells hidden ({n:,}, too many to draw)",
-                                       line=dict(color="rgba(150,150,150,0.4)", width=1), hoverinfo="skip"))
+            traces.append(_hidden_note(f"{size:g} m cells hidden ({n:,}, too many to draw)"))
         cols = Occupancy.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
         traces = _meshes(cols, [BUILDING, TREE]) + traces
         default_title = "Octree cells as wire cubes: small near surfaces, large in open air"

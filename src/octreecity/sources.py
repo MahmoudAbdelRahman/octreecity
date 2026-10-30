@@ -21,6 +21,14 @@ Your own source: subclass Source and implement summarize. Boxes are aligned
 cubes given by their min corner and edge, in voxels of `voxel_size` metres;
 parts of a box outside `shape` count as empty.
 
+Object ids: a source can also hold id layers (`ids=` on GridSource and
+SparseSource; Occupancy carries its own). They are categories, not
+numbers: the source hands the builder small codes (0 .. k-1, exact in
+float64) as attributes, and `categorical` maps the codes back to the int64
+ids. The builder gives each leaf the one id its voxels share, or -2 when
+they hold several; ids are never averaged. Ids count on every voxel, air
+included.
+
 Readers for 2D city data (CityGML footprints, GeoJSON, OSM) live in
 octreecity.features and are re-exported here for older code.
 """
@@ -107,6 +115,12 @@ def _stats(box, w, v, n):
     return out
 
 
+def _codes(values):
+    """int64 ids -> (distinct ids, float64 code of each value)."""
+    u, inv = np.unique(np.asarray(values, np.int64), return_inverse=True)
+    return u, inv.reshape(np.shape(values)).astype(np.float64)
+
+
 def _check_labels(labels, n_classes):
     if labels.size and (labels.min() < 0 or labels.max() >= n_classes):
         raise ValueError(f"class ids must be in 0 .. {n_classes - 1} (the classes given); "
@@ -131,12 +145,16 @@ def _merge8(kids, n, size):
 
 class Source:
     """Base class: set shape, voxel_size, origin, classes (optional),
-    attributes (names) and implement summarize."""
+    attributes (names) and implement summarize. categorical: {name: int64
+    values} for attributes that are codes of ids (see the module doc)."""
     shape = (0, 0, 0)
     voxel_size = 1.0
     origin = (0.0, 0.0, 0.0)
+    crs = None
     classes = None
     attributes = ()
+    categorical = {}
+    objects = None
     n_classes = 1
 
     def summarize(self, x, y, z, size):
@@ -153,11 +171,16 @@ class Source:
 
 class GridSource(Source):
     """Dense voxel grid: labels (nx, ny, nz) class ids, attrs {name: grid}
-    with NaN where an attribute is undefined (e.g. in empty voxels)."""
+    with NaN where an attribute is undefined (e.g. in empty voxels), ids
+    {layer: int64 grid} object ids (-1 = none)."""
 
-    def __init__(self, labels, attrs=None, voxel_size=1.0, origin=(0.0, 0.0, 0.0), classes=None):
+    def __init__(self, labels, attrs=None, voxel_size=1.0, origin=(0.0, 0.0, 0.0), classes=None,
+                 ids=None):
         self.labels = np.asarray(labels)
         self.attrs = {k: np.asarray(v, np.float64) for k, v in (attrs or {}).items()}
+        self.categorical = {}
+        for k, v in (ids or {}).items():
+            self.categorical[k], self.attrs[k] = _codes(v)
         self.shape = self.labels.shape
         self.voxel_size, self.origin, self.classes = float(voxel_size), tuple(origin), classes
         self.attributes = tuple(self.attrs)
@@ -204,14 +227,24 @@ class GridSource(Source):
 class OccupancySource(Source):
     """An Occupancy (runs of classes along z per column). attrs: {name:
     (nx, ny) raster}, a value per column that applies to its non-empty
-    voxels (e.g. a building's height or year per footprint pixel)."""
+    voxels (e.g. a building's height or year per footprint pixel). The
+    Occupancy's id layers (one id per run, in 3D) come along as
+    categorical attributes over all voxels, air included; `layers` picks
+    some of them (default all)."""
 
-    def __init__(self, city, attrs=None, classes=None):
+    def __init__(self, city, attrs=None, classes=None, layers=None):
         self.city = city
         self.attrs = {k: np.asarray(v, np.float64) for k, v in (attrs or {}).items()}
         self.shape, self.voxel_size, self.origin = city.shape, city.voxel_size, city.origin
+        self.crs, self.objects = getattr(city, "crs", None), getattr(city, "objects", None)
         self.classes = classes if classes is not None else getattr(city, "classes", None)
-        self.attributes = tuple(self.attrs)
+        ids = getattr(city, "ids", {}) or {}
+        self.categorical, self._run_codes = {}, {}
+        for k in (ids if layers is None else layers):
+            if k in self.attrs:
+                raise ValueError(f"{k!r} is both an attribute and an id layer")
+            self.categorical[k], self._run_codes[k] = _codes(ids[k])
+        self.attributes = tuple(self.attrs) + tuple(self.categorical)
         self.n_classes = len(self.classes) if self.classes is not None else int(city.label.max()) + 1
         _check_labels(np.asarray(city.label), self.n_classes)
         self._bottom = city.bottoms().astype(np.int64)
@@ -252,6 +285,8 @@ class OccupancySource(Source):
             cx, cy = np.divmod(col, ny)
             for k, g in self.attrs.items():
                 stats[k] = _stats(box, wpair, g[cx, cy], m)
+        for k, codes in self._run_codes.items():         # ids: per run, every voxel counts
+            stats[k] = _stats(box[pb], ov.astype(np.float64), codes[run], m)
         return Summary(np.zeros(m), counts, stats)
 
 
@@ -259,12 +294,19 @@ class OccupancySource(Source):
 
 class SparseSource(Source):
     """Occupied voxels only: integer voxel coordinates (x, y, z), one class
-    each, optional attrs {name: value per voxel}. Everything else is empty.
-    Boxes are answered by binary search on Morton codes."""
+    each, optional attrs {name: value per voxel} and ids {layer: object id
+    per voxel}. Everything else is empty (and has no object). Boxes are
+    answered by binary search on Morton codes."""
 
     def __init__(self, x, y, z, labels, attrs=None, shape=None, voxel_size=1.0,
-                 origin=(0.0, 0.0, 0.0), classes=None):
+                 origin=(0.0, 0.0, 0.0), classes=None, ids=None):
         x, y, z = (np.asarray(v, np.int64) for v in (x, y, z))
+        attrs = dict(attrs or {})
+        self.categorical = {}
+        for k, v in (ids or {}).items():          # code 0 = -1: the empty voxels have no object
+            v = np.asarray(v, np.int64)
+            u = np.unique(np.r_[np.int64(-1), v])
+            self.categorical[k], attrs[k] = u, np.searchsorted(u, v).astype(np.float64)
         code = morton.encode(x, y, z)
         order = np.argsort(code, kind="stable")
         self.code = code[order]
@@ -277,7 +319,7 @@ class SparseSource(Source):
         _check_labels(self.labels, self.n_classes)
         self.by_class = [self.code[self.labels == k] for k in range(self.n_classes)]
         self.attrs = {}
-        for k, v in (attrs or {}).items():
+        for k, v in attrs.items():
             v = np.asarray(v, np.float64)[order]
             ok = np.isfinite(v)
             cum = np.zeros((v.size + 1, 3))
@@ -286,15 +328,25 @@ class SparseSource(Source):
         self.attributes = tuple(self.attrs)
 
     @classmethod
-    def from_points(cls, xyz, labels, voxel_size, origin=None, attrs=None, shape=None, classes=None):
+    def from_points(cls, xyz, labels, voxel_size, origin=None, attrs=None, shape=None, classes=None,
+                    ids=None):
         """Voxelise a point cloud: each occupied voxel takes the most common
-        class of its points and the mean of each attribute. Note that points
-        sample surfaces: the inside of a solid stays empty."""
+        class of its points and the mean of each attribute. With ids
+        {layer: object id per point} (an instance field you name; not the
+        LAS point source id, which is the flight line), a voxel takes the
+        (class, id) pair held by the most points. Note that points sample
+        surfaces: the inside of a solid stays empty."""
         xyz = np.asarray(xyz, np.float64)
         origin = xyz.min(0) if origin is None else np.asarray(origin, np.float64)
         v = np.floor((xyz - origin) / voxel_size).astype(np.int64)
         keep = (v >= 0).all(1) & ((v < shape).all(1) if shape is not None else True)
         v, labels = v[keep], np.asarray(labels, np.int64)[keep]
+        layers = list(ids or {})
+        pair_of = None
+        if layers:                    # vote on (class, ids) pairs instead of the class alone
+            key = np.stack([labels] + [np.asarray(ids[k], np.int64)[keep] for k in layers], 1)
+            pair_of, labels = np.unique(key, axis=0, return_inverse=True)
+            labels = labels.ravel().astype(np.int64)
         code = morton.encode(v[:, 0], v[:, 1], v[:, 2])
         o = np.lexsort((labels, code))
         code, labels, v = code[o], labels[o], v[o]
@@ -314,14 +366,19 @@ class SparseSource(Source):
             with np.errstate(invalid="ignore", divide="ignore"):
                 out_attrs[k] = np.bincount(inv, np.where(ok, a, 0)) / np.bincount(inv, ok)
         vx, vy, vz = morton.decode(pcode[win])
-        return cls(vx, vy, vz, plab[win], out_attrs, shape, voxel_size, tuple(origin), classes)
+        if pair_of is None:
+            return cls(vx, vy, vz, plab[win], out_attrs, shape, voxel_size, tuple(origin), classes)
+        p = pair_of[plab[win]]
+        return cls(vx, vy, vz, p[:, 0], out_attrs, shape, voxel_size, tuple(origin), classes,
+                   ids={k: p[:, 1 + j] for j, k in enumerate(layers)})
 
     @classmethod
     def from_surfaces(cls, polygons, labels, voxel_size, origin=None, attrs=None, shape=None,
-                      classes=None, spacing=None):
+                      classes=None, spacing=None, ids=None):
         """Voxelise 3D polygons (CityGML surfaces, mesh faces): each polygon
         is sampled on a grid of `spacing` (default half a voxel) in its own
-        plane, then as from_points. labels / attrs: one value per polygon.
+        plane, then as from_points. labels / attrs / ids: one value per
+        polygon (ids: {layer: object id per polygon}).
         Like a point cloud, this marks the surfaces; insides stay empty."""
         sp = voxel_size / 2 if spacing is None else float(spacing)
         pts, owner = [], []
@@ -331,7 +388,8 @@ class SparseSource(Source):
             owner.append(np.full(len(q), k))
         pts, owner = np.concatenate(pts), np.concatenate(owner)
         a = {n: np.asarray(v, np.float64)[owner] for n, v in (attrs or {}).items()}
-        return cls.from_points(pts, np.asarray(labels)[owner], voxel_size, origin, a, shape, classes)
+        i = {n: np.asarray(v, np.int64)[owner] for n, v in (ids or {}).items()} or None
+        return cls.from_points(pts, np.asarray(labels)[owner], voxel_size, origin, a, shape, classes, i)
 
     def summarize(self, x, y, z, size):
         x, y, z = (np.asarray(v, np.int64) for v in (x, y, z))
@@ -350,6 +408,10 @@ class SparseSource(Source):
                 st[:, 3] = np.fmin.reduceat(vp, idx)[::2]
                 st[:, 4] = np.fmax.reduceat(vp, idx)[::2]
             st[st[:, 0] == 0, 3:] = np.nan
+            if k in self.categorical:                # empty voxels hold -1 (code 0)
+                part = st[:, 0] < float(s) ** 3
+                st[part, 3] = 0.0
+                st[part, 4] = np.where(np.isnan(st[part, 4]), 0.0, st[part, 4])
             out.stats[k] = st
         return self._fill_empty(out, s)
 

@@ -18,7 +18,7 @@ tree over the same box (for snapshots taken on different trees).
 import numpy as np
 from scipy import ndimage
 
-from .adapt import transfer
+from .adapt import transfer, transfer_ids
 
 
 def from_source(tree, source, levels=None):
@@ -122,11 +122,16 @@ def from_function(tree, func, samples=1):
 def carry(old, new, columns=None):
     """Copy numeric columns from `old` onto `new` (same box): a new leaf
     inside an old one takes its value, a new leaf covering several takes
-    their volume-weighted mean. Changes `new` in place and returns it."""
+    their volume-weighted mean. Id columns (old.id_columns) take the id
+    the covered leaves share, or -2: they are never averaged. Changes `new`
+    in place and returns it."""
     names = old.cells.keys() if columns is None else columns
     for k in names:
         v = np.asarray(old.cells[k])
-        if v.ndim == 1 and v.dtype.kind in "fiub":
+        if k in old.id_columns:
+            new.cells[k] = transfer_ids(old, v, new)
+            new.id_columns = tuple(dict.fromkeys(tuple(new.id_columns) + (k,)))
+        elif v.ndim == 1 and v.dtype.kind in "fiub":
             new.cells[k] = transfer(old, v.astype(np.float64), new)
         elif v.ndim == 2 and v.dtype.kind == "f":
             new.cells[k] = np.stack([transfer(old, v[:, j], new) for j in range(v.shape[1])], 1)

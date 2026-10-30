@@ -118,6 +118,10 @@ def _column(tree, name, parents=None):
                "label": lambda: tree.label.astype(np.float64)}
     if name in builtin:
         return builtin[name]()
+    if name in getattr(tree, "id_columns", ()):
+        raise ValueError(f"{name!r} holds object ids: they are categories, not numbers, and must not "
+                         "be used as a numeric feature or averaged. Use an object-table column per "
+                         "cell instead (tree.select().cells / CellView.object), or an embedding.")
     if name in tree.cells:
         return np.asarray(tree.cells[name], np.float64)
     if name.startswith("share_") and "share" in tree.cells:

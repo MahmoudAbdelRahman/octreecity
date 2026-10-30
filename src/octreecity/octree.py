@@ -18,8 +18,17 @@ Content per leaf (the cell table):
     series   dict of dynamic columns (n_leaves, n_times), one value per
              snapshot in `times`; the tree stays the same across snapshots
 
+    id_columns names of the cell columns that hold object ids (int64,
+             -1 = no object, -2 = mixed). They are categories: never
+             averaged (see Parents.reduce(how="same")); the object table
+             they point into is `objects` (octreecity.objects)
+    crs      coordinate reference system of origin (text, e.g. "EPSG:32648")
+
 Every change to the leaves (sorting, split, balance) moves all columns
 along; a split copies a leaf's row to its 8 children.
+
+Queries (octreecity.query): tree.select(id=7).neighbours(steps=1),
+tree.select(where=...).within(10.0), .parents(1), .siblings(), ...
 
 The box does not need to be a cube: nx, ny, nz must be multiples of the
 root size 2**max_level, and the domain is tiled by several root cubes.
@@ -30,7 +39,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy import ndimage
 
-from . import morton
+from . import _io, morton
 from .classes import EMPTY, Classes
 
 MIXED = 255
@@ -49,6 +58,9 @@ class LinearOctree:
     cells: dict = field(default_factory=dict)
     series: dict = field(default_factory=dict)
     times: np.ndarray = None
+    crs: str = None
+    id_columns: tuple = ()
+    objects: object = None
 
     def __post_init__(self):
         self.code = np.asarray(self.code, np.uint64)
@@ -63,6 +75,10 @@ class LinearOctree:
         for k, v in list(self.cells.items()) + list(self.series.items()):
             if len(v) != n:
                 raise ValueError(f"column {k!r} has {len(v)} rows, expected {n}")
+        self.id_columns = tuple(self.id_columns or ())
+        for k in self.id_columns:
+            if k in self.cells:
+                self.cells[k] = self.cells[k].astype(np.int64)
         self._reorder(np.argsort(self.code, kind="stable"))
 
     def _reorder(self, order):
@@ -191,16 +207,18 @@ class LinearOctree:
     def label_at(self, x, y, z):
         return self.label[self.locate(x, y, z)]
 
-    def to_dense(self):
-        grid = np.empty(self.shape, self.label.dtype)
+    def to_dense(self, column=None):
+        """Dense voxel grid of the labels, or of a 1D cell column (e.g. an
+        id column: to_dense("id")). Small boxes only."""
+        v = self.label if column is None else np.asarray(self.cells[column])
+        grid = np.empty(self.shape, v.dtype)
         x, y, z = self.corners()
         for lv in np.unique(self.level):
             s = 1 << int(lv)
             m = self.level == lv
             view = grid.reshape(self.shape[0] // s, s, self.shape[1] // s, s,
                                 self.shape[2] // s, s)
-            view[x[m] // s, :, y[m] // s, :, z[m] // s, :] = \
-                self.label[m][:, None, None, None]
+            view[x[m] // s, :, y[m] // s, :, z[m] // s, :] = v[m][:, None, None, None]
         return grid
 
     def level_histogram(self):
@@ -224,6 +242,33 @@ class LinearOctree:
 
     def sizes_m(self):
         return self.sizes() * float(self.voxel_size)
+
+    # ---------------------------------------------------------------- queries
+
+    def select(self, id=None, **kw):
+        """Leaves by object id, cell column, object-table column or any
+        function: a Group (see octreecity.query.Query.select)."""
+        from .query import Query
+
+        return Query(self).select(id=id, **kw)
+
+    def group(self, idx, **values):
+        """Leaves given by index, as a Group."""
+        from .query import Group, Query
+
+        return Group(Query(self), idx, **values)
+
+    def touching(self, id, **kw):
+        """Objects whose cells touch object `id` (octreecity.query.Query.touching)."""
+        from .query import Query
+
+        return Query(self).touching(id, **kw)
+
+    def near(self, id, metres, **kw):
+        """Objects with a cell within `metres` of object `id`."""
+        from .query import Query
+
+        return Query(self).near(id, metres, **kw)
 
     # ------------------------------------------------------------- cell table
 
@@ -410,32 +455,66 @@ class LinearOctree:
         t.code = t.root_codes()[(off // root).astype(np.int64)] + off % root
         return t
 
-    def save(self, path):
+    def meta(self):
+        return {"format": "octreecity.octree", "version": _io.FORMAT_VERSION, "crs": self.crs,
+                "voxel_size": self.voxel_size, "origin": list(self.origin), "shape": list(self.shape),
+                "max_level": self.max_level, "id_columns": list(self.id_columns),
+                "units": {"voxel_size": "m", "origin": "m"},
+                "reserved_ids": {"-1": "no object", "-2": "mixed"}}
+
+    def save(self, path, objects=True, meta=None):
         """Compressed .npz: structure as (level, label) per leaf, plus the
-        cell table, the snapshots and the class names."""
+        cell table, the snapshots, the class names, __meta__ (crs, id
+        columns, units ...) and, if objects is True and a table is attached,
+        the object table. Text columns are stored as fixed-width text;
+        columns of other Python objects cannot be saved (ValueError)."""
         level, label = self.to_compact()
-        extra = {f"cell__{k}": v for k, v in self.cells.items()}
-        extra.update({f"series__{k}": v for k, v in self.series.items()})
+        extra = {}
+        for k, v in self.cells.items():
+            if k in self.id_columns:
+                extra.update(_io.pack_ids(f"cell__{k}", v))
+            else:
+                extra[f"cell__{k}"] = _savable(k, v)
+        extra.update({f"series__{k}": _savable(k, v) for k, v in self.series.items()})
         if self.times is not None:
-            extra["times"] = self.times
+            extra["times"] = _savable("times", self.times)
         if self.classes is not None:
             extra["class_names"], extra["class_parent"] = self.classes.to_arrays()
+        if objects:
+            extra.update(_io.objects_entry(self.objects))
         np.savez_compressed(path, shape=np.array(self.shape), max_level=self.max_level,
                             level=level, label=label, voxel_size=self.voxel_size,
-                            origin=np.array(self.origin), **extra)
+                            origin=np.array(self.origin),
+                            **_io.meta_entry({**self.meta(), **(meta or {})}), **extra)
 
     @classmethod
     def load(cls, path):
-        d = np.load(path, allow_pickle=False)
+        d = _io.open_npz(path)
         t = cls.from_compact(tuple(int(v) for v in d["shape"]), int(d["max_level"]),
                              d["level"], d["label"], float(d["voxel_size"]),
                              tuple(float(v) for v in d["origin"]))
+        meta = _io.read_meta(d)
+        ids = meta.get("id_columns", [])
         # from_compact builds leaves already in Morton order: columns line up
-        t.cells = {k[6:]: d[k] for k in d.files if k.startswith("cell__")}
+        t.cells = {}
+        for k in d.files:
+            if not k.startswith("cell__"):
+                continue
+            name = k[6:]
+            if name.endswith("__codes"):
+                continue
+            if name.endswith("__values"):
+                name = name[:-8]
+                t.cells[name] = _io.unpack_ids(d, f"cell__{name}")
+            else:
+                t.cells[name] = d[k]
         t.series = {k[8:]: d[k] for k in d.files if k.startswith("series__")}
         t.times = d["times"] if "times" in d.files else None
         if "class_names" in d.files:
             t.classes = Classes.from_arrays(d["class_names"], d["class_parent"])
+        t.crs = meta.get("crs")
+        t.id_columns = tuple(k for k in ids if k in t.cells)
+        t.objects = _io.read_objects(d)
         return t
 
 
@@ -527,13 +606,30 @@ class Parents:
             chain.append(nxt)
         return np.stack(chain[:-1], 1) if len(chain) > 1 else np.zeros((self.tree.n_leaves, 0), int)
 
-    def reduce(self, values, how="mean", weight="volume"):
+    def reduce(self, values, how=None, weight="volume"):
         """Summary of a leaf column over each internal cell.
 
+        values: an array with one row per leaf, or the name of a cell column.
         how: mean (weighted by leaf volume, or by `weight` per leaf; NaN
-        values are skipped), sum, min, max. values may have extra axes
-        (e.g. class shares (n, C)).
+        values are skipped), sum, min, max, or same: the value all leaves
+        under the cell share, else -2 (for categories such as object ids,
+        exact for int64). values may have extra axes (e.g. class shares
+        (n, C)). Default: same for an id column, else mean. Id columns are
+        never averaged: mean / sum on one raises ValueError.
         """
+        is_id = isinstance(values, str) and values in self.tree.id_columns
+        if isinstance(values, str):
+            values = self.tree.cells[values]
+        how = how or ("same" if is_id else "mean")
+        if how == "same":
+            return self._same(np.asarray(values))
+        if how not in ("mean", "sum", "min", "max"):
+            raise ValueError(f"unknown how={how!r}")
+        raw = np.asarray(values)
+        if is_id or (how in ("mean", "sum") and raw.dtype.kind in "iu" and raw.size
+                     and np.abs(raw.astype(np.float64)).max() >= 2 ** 53):
+            raise ValueError("these values are object ids (or too big for float64): they must not "
+                             "be averaged or summed; use how='same'")
         v = np.asarray(values, np.float64)
         lo, hi = self.leaf_range()
         if how in ("min", "max"):
@@ -557,6 +653,29 @@ class Parents:
         den = cw[hi] - cw[lo]
         with np.errstate(invalid="ignore", divide="ignore"):
             return np.where(den > 0, tot / den, np.nan)
+
+    def _same(self, v, mixed=-2):
+        lo, hi = self.leaf_range()
+        if not len(lo):
+            return np.zeros(0, v.dtype)
+        vp = np.r_[v, v[-1:]]                       # hi may equal n_leaves
+        idx = np.stack([lo, hi], 1).ravel()          # even entries reduce over [lo, hi)
+        mn = np.minimum.reduceat(vp, idx)[::2]
+        mx = np.maximum.reduceat(vp, idx)[::2]
+        return np.where(mn == mx, mn, np.asarray(mixed, v.dtype))
+
+
+def _savable(name, v):
+    """An array np.load can read back without pickle: text objects become
+    fixed-width text; other Python objects are refused."""
+    v = np.asarray(v)
+    if v.dtype != object:
+        return v
+    flat = v.ravel().tolist()
+    if all(isinstance(x, str) for x in flat):
+        return np.array(flat, dtype=str).reshape(v.shape)
+    raise ValueError(f"column {name!r} holds Python objects, which cannot be saved; "
+                     "use numbers or text (or keep the values in the object table)")
 
 
 def _mask(code, level):

@@ -114,6 +114,23 @@ octreecity sun city.npz --lat 34.69 --lon 135.5 --tz 9 --date 2026-12-21 -o sun.
 octreecity obj city.npz -o city.obj
 ```
 
+## Objects and queries
+
+Every voxel and cell knows which object it belongs to (a building, a
+building part, a street, a zone), and one object table keeps the rest:
+where it came from (`osm:way/123`), its parent, its tags.
+
+```python
+tree = city.to_octree(5)                     # city from city_from_osm, or your own CityBuilder with ids
+g = tree.select(tags={"name": "Seng Poh Road"})
+g.neighbours(steps=1).objects()              # what touches the street
+tree.select(cls="building").within(10.0)     # cells within 10 m of any building
+tree.select(id=i).parents(1).siblings()      # walk the octree
+city.objects.children(i)                     # the parts of building i
+```
+
+See [objects and queries](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/objects-and-queries.md).
+
 ## Why octrees instead of fixed-size voxels
 
 A fixed voxel grid uses one cell size everywhere. To get 1 m detail at a wall,
@@ -226,7 +243,7 @@ agree, repeat.*
 The [documentation](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/index.md) is organised by what you want to do:
 
 - **Tutorials:** [quickstart](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/tutorials/quickstart.md) and the [notebook](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/notebooks/octreecity_quickstart.ipynb)
-- **How-to guides:** [your own data](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/own-data.md), [3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/3d-views.md),
+- **How-to guides:** [your own data](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/own-data.md), [objects and queries](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/objects-and-queries.md), [3D views](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/3d-views.md),
   [sky view and sun](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/sky-and-sun.md), [whole cities](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/whole-cities.md),
   [export](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/export.md), [running the notebook](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/how-to/run-the-notebook.md)
 - **Explanation:** [how it works](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/explanation/how-it-works.md), [adaptive cells](https://github.com/MahmoudAbdelRahman/octreecity/blob/main/docs/explanation/adaptive-cells.md)
@@ -251,7 +268,7 @@ existing tools:
 
 ## Status
 
-Version 0.2 (alpha). It is tested (100 tests, Python 3.10 to 3.13) with Osaka
+Version 0.4 (alpha). It is tested (about 150 tests, Python 3.10 to 3.13) with Osaka
 (PLATEAU) and Daejeon (V-World and OpenStreetMap), and the general core
 rebuilds the token sets of its paper's experiments exactly
 (`scripts/check_paper_*.py`). File formats may still change before 1.0. See

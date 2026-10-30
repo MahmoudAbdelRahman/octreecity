@@ -21,3 +21,4 @@ outputs/gifs/_frames/
 notebooks/*.npz
 notebooks/*.obj
 notebooks/*.mtl
+!tests/data/

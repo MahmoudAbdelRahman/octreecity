@@ -7,6 +7,10 @@ so a whole city never has to fit in memory. Layout inside the zip:
     t/<i>_<j>/counts.npy       runs per column (uint16)
     t/<i>_<j>/top.npy          run tops (uint16, voxels)
     t/<i>_<j>/label.npy        run labels (uint8)
+    t/<i>_<j>/id__<layer>.npy  object id per run, per id layer (int64)
+
+For a city with an object table, appends and edits, use the folder store
+(octreecity.store.Store); this one-zip format is kept for older code.
 
 Tile (i, j) covers x0 + i * tile .. x0 + (i + 1) * tile (same for y). All
 tiles share the z origin and cell size; each has its own height (nz).
@@ -32,12 +36,13 @@ class TiledCityWriter:
 
     def add(self, i, j, city):
         name = f"{i}_{j}"
-        for key, arr in (("counts", np.diff(city.offsets).astype(np.uint16)),
-                         ("top", city.top), ("label", city.label)):
+        arrays = [("counts", np.diff(city.offsets).astype(np.uint16)), ("top", city.top),
+                  ("label", city.label)] + [(f"id__{k}", v) for k, v in city.ids.items()]
+        for key, arr in arrays:
             buf = io.BytesIO()
             np.lib.format.write_array(buf, np.ascontiguousarray(arr), allow_pickle=False)
             self.zf.writestr(f"t/{name}/{key}.npy", buf.getvalue())
-        self.meta["tiles"][name] = dict(nz=int(city.shape[2]), runs=int(city.n_runs))
+        self.meta["tiles"][name] = dict(nz=int(city.shape[2]), runs=int(city.n_runs), layers=list(city.ids))
 
     def close(self):
         self.zf.writestr("meta.json", json.dumps(self.meta))
@@ -74,9 +79,11 @@ class TiledCity:
         counts = self._arr(name, "counts")
         offsets = np.zeros(counts.size + 1, np.int64)
         np.cumsum(counts, out=offsets[1:])
+        ids = {k: self._arr(name, f"id__{k}") for k in m["tiles"][name].get("layers", [])}
         return Occupancy((self.n, self.n, m["tiles"][name]["nz"]), offsets,
                           self._arr(name, "top"), self._arr(name, "label"), self.cell,
-                          (m["x0"] + i * self.tile_size, m["y0"] + j * self.tile_size, m["z0"]))
+                          (m["x0"] + i * self.tile_size, m["y0"] + j * self.tile_size, m["z0"]),
+                          crs=m.get("crs"), ids=ids)
 
     def index_of(self, x, y):
         m = self.meta
@@ -85,51 +92,25 @@ class TiledCity:
     def region(self, i0, j0, i1, j1, nz=None):
         """Tiles i0 <= i < i1, j0 <= j < j1 stitched into one Occupancy.
         Missing tiles become ground-free air; shorter tiles are topped up
-        with air to a common height."""
+        with air to a common height. Id layers come along (-1 where a tile
+        has none)."""
         tiles = {(i, j): self.tile(i, j) for i in range(i0, i1) for j in range(j0, j1)}
         nz = nz or max([t.shape[2] for t in tiles.values() if t is not None] + [1])
-        n, ny = self.n, (j1 - j0) * self.n
-        counts, tops, labs = [], [], []
+        n, m = self.n, self.meta
+        rows = []
         for i in range(i0, i1):
-            row = [tiles[(i, j)] for j in range(j0, j1)]
-            for x in range(n):
-                for j, t in enumerate(row):
-                    c, tp, lb = _column_slice(t, x, n, nz)
-                    counts.append(c)
-                    tops.append(tp)
-                    labs.append(lb)
-        counts = np.concatenate(counts)
-        offsets = np.zeros(counts.size + 1, np.int64)
-        np.cumsum(counts, out=offsets[1:])
-        m = self.meta
-        return Occupancy(((i1 - i0) * n, ny, nz), offsets, np.concatenate(tops),
-                          np.concatenate(labs), self.cell,
-                          (m["x0"] + i0 * self.tile_size, m["y0"] + j0 * self.tile_size, m["z0"]))
-
-
-def _column_slice(t, x, n, nz):
-    """Runs of the n columns at row x of tile t, raised to height nz."""
-    if t is None:
-        return np.ones(n, np.int64), np.full(n, nz, np.uint16), np.full(n, AIR, np.uint8)
-    k0, k1 = t.offsets[x * n], t.offsets[(x + 1) * n]
-    counts = np.diff(t.offsets[x * n:(x + 1) * n + 1])
-    top = t.top[k0:k1].copy()
-    lab = t.label[k0:k1]
-    if nz == t.shape[2]:
-        return counts, top, lab
-    last = t.offsets[x * n + 1:(x + 1) * n + 1] - 1 - k0
-    air_last = lab[last] == AIR
-    top[last[air_last]] = nz
-    # columns ending in a solid run get an extra air run on top
-    need = np.nonzero(~air_last)[0]
-    if need.size == 0:
-        return counts, top, lab
-    ins = last[need] + 1
-    top = np.insert(top, ins, nz)
-    lab = np.insert(lab, ins, AIR)
-    counts = counts.copy()
-    counts[need] += 1
-    return counts, top, lab
+            row = []
+            for j in range(j0, j1):
+                t = tiles[(i, j)]
+                if t is None:
+                    t = Occupancy((n, n, nz), np.arange(n * n + 1, dtype=np.int64),
+                                  np.full(n * n, nz, np.uint16), np.full(n * n, AIR, np.uint8), self.cell)
+                row.append(t.pad_z(nz))
+            rows.append(Occupancy.concat_y(row))
+        out = Occupancy.concat_x(rows, self.cell, (m["x0"] + i0 * self.tile_size,
+                                                   m["y0"] + j0 * self.tile_size, m["z0"]))
+        out.crs = m.get("crs")
+        return out
 
 
 def _build_one(args):

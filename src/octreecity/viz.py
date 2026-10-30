@@ -11,7 +11,7 @@ view stays quick; the data itself is untouched.
 
 import numpy as np
 
-from .columns import ColumnCity
+from .occupancy import Occupancy
 from .urban import AIR, BUILDING, GRASS, GROUND, PAVEMENT, ROAD, TREE, WATER
 
 STYLE = {
@@ -28,7 +28,7 @@ DISPLAY_COLUMNS = 150_000      # bigger cities are simplified for display only; 
 
 
 def downsample(city, step):
-    """Coarser ColumnCity for display: each step^3 block takes its most
+    """Coarser Occupancy for display: each step^3 block takes its most
     common label, except that any solid wins over air when it fills at
     least a quarter of the block (keeps thin buildings visible)."""
     if step <= 1:
@@ -48,7 +48,7 @@ def downsample(city, step):
         sbest = np.array(labels, np.uint8)[solid.argmax(0)]
         enough = solid.max(0) * 4 >= step ** 3
         out[x0 // step:x1 // step] = np.where(enough, sbest, best)
-    return ColumnCity.from_dense(out, city.voxel_size * step, city.origin)
+    return Occupancy.from_dense(out, city.voxel_size * step, city.origin)
 
 
 def _auto_step(city, max_columns=None):
@@ -135,7 +135,7 @@ def _quad_edges(q):
 
 
 def show(city, labels=None, step=None, title=None, height=700, wireframe=False, max_edges=60_000):
-    """Interactive 3D view of a ColumnCity (drag to rotate, scroll to zoom).
+    """Interactive 3D view of an Occupancy (drag to rotate, scroll to zoom).
 
     labels: which labels to draw (default: every solid label).
     step: display simplification (merge step x step cells); chosen
@@ -253,7 +253,7 @@ def show_cells(tree, y=None, title=None, height=650, max_cells=80_000):
         name, color = STYLE.get(int(L), (f"label {L}", "#cc4444"))
         traces.append(quads(x0[m], z0[m], s[m], color, name))
     fig = go.Figure(traces)
-    fig = _layout(fig, ColumnCity(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
+    fig = _layout(fig, Occupancy(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
                                   np.zeros(0, np.uint8), c, tree.origin),
                   title or f"Adaptive cells on a vertical cut at y = {yy:.0f} m", height)
     fig.update_layout(scene_camera=dict(eye=dict(x=0.0, y=-0.85, z=0.05)))
@@ -328,7 +328,7 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
             traces.append(go.Scatter3d(x=[None], y=[None], z=[None], mode="lines",
                                        name=f"{size:g} m cells hidden ({n:,}, too many to draw)",
                                        line=dict(color="rgba(150,150,150,0.4)", width=1), hoverinfo="skip"))
-        cols = ColumnCity.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
+        cols = Occupancy.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
         traces = _meshes(cols, [BUILDING, TREE]) + traces
         default_title = "Octree cells as wire cubes: small near surfaces, large in open air"
     elif style == "shells":
@@ -336,7 +336,7 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
         shell_opac = [0.65, 0.32, 0.18, 0.1, 0.07]
         for k, L in enumerate(levels[:-1]):
             region = solid | (lev <= L)
-            cols = ColumnCity.from_dense(region.astype(np.uint8), c, (0.0, 0.0, tree.origin[2]))
+            cols = Occupancy.from_dense(region.astype(np.uint8), c, (0.0, 0.0, tree.origin[2]))
             q, _ = surface_quads(cols, labels=[1])
             if len(q) == 0:
                 continue
@@ -351,7 +351,7 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
                                     name=f"cells up to {(1 << L) * c:g} m", flatshading=True,
                                     showlegend=True, hoverinfo="name",
                                     lighting=dict(ambient=0.6, diffuse=0.6, specular=0.05)))
-        cols = ColumnCity.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
+        cols = Occupancy.from_dense(lab, c, (0.0, 0.0, tree.origin[2]))
         traces = _meshes(cols, [BUILDING, TREE]) + traces
         default_title = "Where the cells are fine: nested shells by cell size"
     else:
@@ -398,7 +398,7 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
         # buildings outside the removed corner
         keep = lab.copy()
         keep[:cx, :cy] = AIR
-        cols = ColumnCity.from_dense(keep, c, (0.0, 0.0, tree.origin[2]))
+        cols = Occupancy.from_dense(keep, c, (0.0, 0.0, tree.origin[2]))
         traces = _meshes(cols, [BUILDING, TREE]) + f1 + f2
         seen = set()
         for t in traces:
@@ -407,7 +407,7 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
             seen.add(t.name)
         default_title = "Octree cut-away: cells on two cut faces, coloured by size"
     fig = go.Figure(traces)
-    fig = _layout(fig, ColumnCity(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
+    fig = _layout(fig, Occupancy(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
                                   np.zeros(0, np.uint8), c, tree.origin), title or default_title, height)
     if style == "cutaway":
         fig.update_layout(scene_camera=dict(eye=dict(x=-1.1, y=-1.1, z=0.7)))

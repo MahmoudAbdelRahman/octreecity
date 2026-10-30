@@ -4,7 +4,7 @@
     city = city_from_osm(36.370, 127.3625, size_m=600)   # KAIST, Daejeon
 
 Downloads buildings, land cover, trees, water and roads from the Overpass
-API, projects them to the local UTM zone and builds a ColumnCity. Terrain
+API, projects them to the local UTM zone and builds an Occupancy. Terrain
 is flat (no elevation model is downloaded). Building heights come from the
 OSM tags height or building:levels; others get `default_height`.
 """
@@ -92,7 +92,7 @@ def _subset(osm, test):
 def city_from_osm(lat, lon, size_m=500.0, cell=1.0, cache=None, osm_json=None, buildings=None,
                   default_height=10.0, level_height=3.0, tree_height=12.0, air_above=20.0,
                   city_cache=None):
-    """Build a ColumnCity of a size_m square around (lat, lon) from OSM.
+    """Build an Occupancy of a size_m square around (lat, lon) from OSM.
 
     cache: file to keep the downloaded OSM data (.json). city_cache: file to
     keep the finished city (.npz); if it exists it is loaded instead of
@@ -103,9 +103,9 @@ def city_from_osm(lat, lon, size_m=500.0, cell=1.0, cache=None, osm_json=None, b
     holds the EPSG code.
     """
     if city_cache is not None and Path(city_cache).exists():
-        from .columns import ColumnCity
+        from .occupancy import Occupancy
 
-        return ColumnCity.load(city_cache)
+        return Occupancy.load(city_cache)
     epsg = utm_epsg(lat, lon)
     data = osm_json if osm_json is not None else fetch_osm(lat, lon, size_m, cache)
     osm = read_osm_overpass(data, crs_to=epsg)

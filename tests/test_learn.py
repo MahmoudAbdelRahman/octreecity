@@ -2,19 +2,19 @@ import numpy as np
 import pytest
 
 from octreecity.build import build
-from octreecity.columns import ColumnCity
 from octreecity.learn import Tokens, batches, pixel_map, tokens
 from octreecity.links import hierarchy, neighbours
+from octreecity.occupancy import Occupancy
 from octreecity.rules import mixed
-from octreecity.sources import ColumnSource
+from octreecity.sources import OccupancySource
 
 
 @pytest.fixture
 def tree():
     rng = np.random.default_rng(0)
     h = np.where(rng.random((32, 32)) < 0.3, rng.integers(1, 12, (32, 32)), 0).astype(float)
-    city = ColumnCity.from_heightfield(np.zeros_like(h), h, 2, 16)
-    t = build(ColumnSource(city, attrs={"h": np.where(h > 0, h, np.nan)}), mixed(), 3).balance(6)
+    city = Occupancy.from_heightfield(np.zeros_like(h), h, 2, 16)
+    t = build(OccupancySource(city, attrs={"h": np.where(h > 0, h, np.nan)}), mixed(), 3).balance(6)
     t.cells["svf"] = np.random.default_rng(1).random(t.n_leaves)
     return t
 

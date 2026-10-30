@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+### Changed (breaking)
+
+- Renamed to match the words of the City Tokens paper, where a cell carries
+  semantic occupancy (which voxels are filled, and by what) and thematic
+  attributes: `ColumnCity` is now `Occupancy`, `ColumnSource` is now
+  `OccupancySource`, and the module `octreecity.columns` is now
+  `octreecity.occupancy`. The old names are removed. Saved `.npz` files are
+  unchanged and load as before.
+
 ## 0.2.0
 
 A general core for adaptive cells as the basic unit of 3D space for AI. The

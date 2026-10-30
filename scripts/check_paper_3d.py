@@ -23,11 +23,11 @@ import math, pickle, sys, time
 import numpy as np
 
 from octreecity.build import build, uniform
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.learn import tokens
 from octreecity.links import across, hierarchy, neighbours
 from octreecity.rules import mixed, where
-from octreecity.sources import ColumnSource
+from octreecity.sources import OccupancySource
 from octreecity.urban import BUILDING
 
 PC = "/Users/mahmoud/Projects/octreecity-paper-code"
@@ -41,7 +41,7 @@ def occupancy_city(pic):
     b = (h.reshape(128, 2, 128, 2) > 0).mean((1, 3)) >= 0.5
     h2 = np.where(b, h.reshape(128, 2, 128, 2).mean((1, 3)), 0.0)
     nl = np.where(b, np.clip(np.ceil(h2 / 2), 1, 32), 0)           # building voxels per 2 m column
-    return ColumnCity.from_heightfield(np.zeros_like(nl), nl, BUILDING, 32, voxel_size=2.0)
+    return Occupancy.from_heightfield(np.zeros_like(nl), nl, BUILDING, 32, voxel_size=2.0)
 
 
 def ground_cap(cs):
@@ -86,7 +86,7 @@ def main():
         t0 = time.time()
         city = occupancy_city(pics[d["tile"]])
         cs = (d["size"][d["pix2cell"]].reshape(128, 128) / 2).astype(int)   # 2D leaf size per pixel (voxels)
-        tree = build(ColumnSource(city), mixed() | where(ground_cap(cs)), 5, shares=True)
+        tree = build(OccupancySource(city), mixed() | where(ground_cap(cs)), 5, shares=True)
         tree.cells["occ"] = tree.cells["share"][:, BUILDING]
         p = tree.parents(levels_above=2)
         links = across(tree, p) | hierarchy(tree, p)
@@ -97,8 +97,8 @@ def main():
         tp += time.time() - t0
         r = compare(tok, g)
         # vox3d: uniform 2 m voxels, z 0-16 m, 6 face neighbours
-        low = ColumnCity.from_dense(city.to_dense()[:, :, :8], 2.0)
-        u = uniform(ColumnSource(low), 0)
+        low = Occupancy.from_dense(city.to_dense()[:, :, :8], 2.0)
+        u = uniform(OccupancySource(low), 0)
         vt = tokens(u, ["label"], neighbours(u, 6), k=7)
         gv = v3.build_vox(d, pics[d["tile"]])
         rv = compare(vt, gv)

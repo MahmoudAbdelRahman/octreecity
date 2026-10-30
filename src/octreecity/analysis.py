@@ -1,4 +1,4 @@
-"""Ray-based analyses on a ColumnCity: sky view factor, shadows, sun hours.
+"""Ray-based analyses on an Occupancy: sky view factor, shadows, sun hours.
 
 Two ray modes:
     surface  march over the 2.5D top surface (highest solid run per column).

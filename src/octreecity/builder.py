@@ -1,11 +1,11 @@
-"""Turn Features and rasters into a ColumnCity, one rectangle at a time.
+"""Turn Features and rasters into an Occupancy, one rectangle at a time.
 
     b = CityBuilder(x0, y0, width=1000, depth=1000, cell=1.0)
     b.add_terrain(dem)                     # raster (m) or callable(x, y)
     b.add_landcover(parks, GRASS)          # top ground voxel takes the label
     b.add_trees(canopies, top=12, base=3)  # canopy with air below
     b.add_buildings(buildings)             # Features with height (+ base)
-    city = b.build()                       # ColumnCity
+    city = b.build()                       # Occupancy
 
 All lengths in metres, x east and y north, in the CRS of the Features.
 Rasters are indexed [i, j] with i along x and j along y, at cell centres
@@ -16,7 +16,7 @@ import numpy as np
 import shapely
 from PIL import Image, ImageDraw
 
-from .columns import ColumnCity
+from .occupancy import Occupancy
 from .urban import CLASSES, AIR, BUILDING, GRASS, GROUND, LABELS, PAVEMENT, ROAD, TREE, WATER  # noqa: F401
 
 
@@ -116,7 +116,7 @@ class CityBuilder:
         return self
 
     def build(self, air_above=20.0, ground_thickness=None, nz=None):
-        """ColumnCity. z = 0 is one ground_thickness (default one cell) below
+        """Occupancy. z = 0 is one ground_thickness (default one cell) below
         the lowest terrain point; the box reaches air_above over the top."""
         c = self.cell
         gt = c if ground_thickness is None else float(ground_thickness)
@@ -130,7 +130,7 @@ class CityBuilder:
             bb = np.where(np.isnan(b), np.inf, (b - z0) / c)
             tt = np.where(np.isnan(t), -np.inf, (t - z0) / c)
             layers.append((bb, tt, lab))
-        city = ColumnCity.from_layers((self.nx, self.ny, nz), layers, default=AIR,
+        city = Occupancy.from_layers((self.nx, self.ny, nz), layers, default=AIR,
                                       voxel_size=c, origin=(self.x0, self.y0, z0))
         city.classes = CLASSES
         return city

@@ -13,15 +13,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from octreecity.analysis import street_points, sun_hours, surface_height
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.urban import BUILDING, TREE
 
 ROOT = Path(__file__).resolve().parent.parent
 BG, FG, MUTED = "#0f1318", "#e6e9ee", "#8b95a3"
-full = ColumnCity.load(ROOT / "data/kaist_1400m_1m.npz")
+full = Occupancy.load(ROOT / "data/kaist_1400m_1m.npz")
 x0, x1, y0, y1 = 100, 600, 450, 950          # the big wood west of the campus centre
 d = full.to_dense(x0, x1)[:, y0:y1]
-city = ColumnCity.from_dense(d, full.voxel_size,
+city = Occupancy.from_dense(d, full.voxel_size,
                              (full.origin[0] + x0, full.origin[1] + y0, full.origin[2]))
 EVERY = 2
 pts, (ii, jj) = street_points(city, every=EVERY)

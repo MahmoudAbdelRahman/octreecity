@@ -5,7 +5,7 @@ tiles   every tile: octree (cells 1-64 m), and unless --octree-only also parent 
 region  one tree over a block of tiles (default 16 x 16 tiles = 4.1 km x 4.1 km, 16.8 M columns),
         cells 1-256 m, built top-down from the columns.
 
---octree-only uses only ColumnCity.to_octree, so the same command also runs on older versions of
+--octree-only uses only Occupancy.to_octree, so the same command also runs on older versions of
 the library (for a speed comparison).
 Usage: python scripts/scale_osaka.py tiles [--octree-only] [--limit N]
        python scripts/scale_osaka.py region [--block 16]
@@ -59,7 +59,7 @@ def tiles(a):
 def region(a):
     from octreecity.build import build
     from octreecity.rules import mixed
-    from octreecity.sources import ColumnSource
+    from octreecity.sources import OccupancySource
 
     tc = TiledCity(OCZ)
     ij = np.array([list(map(int, k.split("_"))) for k in tc.meta["tiles"]])
@@ -68,7 +68,7 @@ def region(a):
     city = tc.region(i0, j0, i0 + a.block, j0 + a.block)
     t1 = time.perf_counter()
     print(f"region {city.shape} columns, {city.n_runs:,} runs, read in {t1 - t0:.0f} s, memory {rss_mb():.0f} MB", flush=True)
-    tree = build(ColumnSource(city), mixed(), 8)
+    tree = build(OccupancySource(city), mixed(), 8)
     t2 = time.perf_counter()
     uniform1 = np.prod([-(-n // 256) * 256 for n in city.shape])
     print(f"tree: {tree.n_leaves:,} cells (uniform 1 m grid: {uniform1:,}), levels {tree.level_histogram().tolist()}")

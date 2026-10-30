@@ -32,11 +32,11 @@ tc = TiledCity(ROOT / "data/osaka_1m.ocz")
 cols = tc.region(41, 47, 43, 49)                      # 512 x 512 m, downtown
 L = 5
 nz = pad_to_multiple(cols.shape[2], L)
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 if nz != cols.shape[2]:
     d = cols.to_dense()
     d = np.concatenate([d, np.zeros(d.shape[:2] + (nz - d.shape[2],), np.uint8)], 2)
-    cols = ColumnCity.from_dense(d, cols.voxel_size, cols.origin)
+    cols = Occupancy.from_dense(d, cols.voxel_size, cols.origin)
 tree = cols.to_octree(L)
 print("geometry octree", tree.n_leaves, "leaves", tree.shape)
 

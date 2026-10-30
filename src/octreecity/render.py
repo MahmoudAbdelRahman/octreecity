@@ -1,4 +1,4 @@
-"""Quick images: shaded top views and sections of a ColumnCity, slices of an octree."""
+"""Quick images: shaded top views and sections of an Occupancy, slices of an octree."""
 
 import numpy as np
 

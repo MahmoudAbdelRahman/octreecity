@@ -2,9 +2,9 @@
 
     from octreecity.build import build
     from octreecity.rules import mixed, varies
-    from octreecity.sources import ColumnSource
+    from octreecity.sources import OccupancySource
 
-    tree = build(ColumnSource(city), mixed() | varies("height", 3.0),
+    tree = build(OccupancySource(city), mixed() | varies("height", 3.0),
                  max_level=5, min_level=0)
 
 The box is tiled by root cubes of 2**max_level voxels (topped up with

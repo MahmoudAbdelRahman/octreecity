@@ -1,6 +1,6 @@
 import numpy as np
 
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.urban import BUILDING
 from octreecity.viz import downsample, show, show_cells, show_values
 
@@ -10,7 +10,7 @@ def city():
     s = g.copy()
     s[10:20, 10:30] += 20
     s[40:50, 30:40] += 8
-    return ColumnCity.from_heightfield(g, s, BUILDING, 32)
+    return Occupancy.from_heightfield(g, s, BUILDING, 32)
 
 
 def test_show_and_values_and_cells():

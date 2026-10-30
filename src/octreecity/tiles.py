@@ -1,4 +1,4 @@
-"""Tiled city store: one zip file, one ColumnCity per square tile.
+"""Tiled city store: one zip file, one Occupancy per square tile.
 
 Any tile (or a rectangle of tiles) can be read without touching the rest,
 so a whole city never has to fit in memory. Layout inside the zip:
@@ -18,7 +18,7 @@ import zipfile
 
 import numpy as np
 
-from .columns import ColumnCity
+from .occupancy import Occupancy
 from .classes import EMPTY as AIR  # empty space
 
 
@@ -74,7 +74,7 @@ class TiledCity:
         counts = self._arr(name, "counts")
         offsets = np.zeros(counts.size + 1, np.int64)
         np.cumsum(counts, out=offsets[1:])
-        return ColumnCity((self.n, self.n, m["tiles"][name]["nz"]), offsets,
+        return Occupancy((self.n, self.n, m["tiles"][name]["nz"]), offsets,
                           self._arr(name, "top"), self._arr(name, "label"), self.cell,
                           (m["x0"] + i * self.tile_size, m["y0"] + j * self.tile_size, m["z0"]))
 
@@ -83,7 +83,7 @@ class TiledCity:
         return int((x - m["x0"]) // self.tile_size), int((y - m["y0"]) // self.tile_size)
 
     def region(self, i0, j0, i1, j1, nz=None):
-        """Tiles i0 <= i < i1, j0 <= j < j1 stitched into one ColumnCity.
+        """Tiles i0 <= i < i1, j0 <= j < j1 stitched into one Occupancy.
         Missing tiles become ground-free air; shorter tiles are topped up
         with air to a common height."""
         tiles = {(i, j): self.tile(i, j) for i in range(i0, i1) for j in range(j0, j1)}
@@ -102,7 +102,7 @@ class TiledCity:
         offsets = np.zeros(counts.size + 1, np.int64)
         np.cumsum(counts, out=offsets[1:])
         m = self.meta
-        return ColumnCity(((i1 - i0) * n, ny, nz), offsets, np.concatenate(tops),
+        return Occupancy(((i1 - i0) * n, ny, nz), offsets, np.concatenate(tops),
                           np.concatenate(labs), self.cell,
                           (m["x0"] + i0 * self.tile_size, m["y0"] + j0 * self.tile_size, m["z0"]))
 

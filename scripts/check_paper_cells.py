@@ -7,10 +7,10 @@ Usage: .venv/bin/python scripts/check_paper_cells.py [tile ...]
 """
 import ast, math, pickle, sys, time
 import numpy as np
-from octreecity.columns import ColumnCity
+from octreecity.occupancy import Occupancy
 from octreecity.build import build
 from octreecity.rules import mixed
-from octreecity.sources import ColumnSource
+from octreecity.sources import OccupancySource
 from octreecity.links import neighbours, hierarchy, across
 from octreecity.fill import from_raster
 from octreecity.learn import tokens, pixel_map
@@ -30,10 +30,10 @@ for d in (g for g in geo if g["tile"] in tiles):
     t = d["tile"]
     h2, b = ns["h2_of"](pics[t])
     nz = int(math.ceil((h2.max() + 16) / 2))
-    city = ColumnCity.from_heightfield(np.zeros_like(h2), h2 / 2, BUILDING, nz, voxel_size=2.0)
+    city = Occupancy.from_heightfield(np.zeros_like(h2), h2 / 2, BUILDING, nz, voxel_size=2.0)
     hcol = np.where(b, h2, 0.0)
     t0 = time.time()
-    tree = build(ColumnSource(city), mixed(), 3).balance(6)
+    tree = build(OccupancySource(city), mixed(), 3).balance(6)
     sel = tree.in_box((0, 0, 0), (128, 128, 1))
     tree.cells["building"] = (tree.label == BUILDING).astype(float)
     # height of a cell = tallest building pixel under it (geo_oct 'height')

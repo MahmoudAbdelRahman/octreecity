@@ -1,7 +1,7 @@
 import numpy as np
 
-from octreecity.columns import ColumnCity
 from octreecity.exports import surface_quads, tensors_2d, tensors_3d, write_obj
+from octreecity.occupancy import Occupancy
 from octreecity.urban import BUILDING, GROUND
 
 
@@ -10,7 +10,7 @@ def city():
     s = g.copy()
     s[5:15, 4:12] += 12
     s[20:35, 10:25] += 7.0
-    return ColumnCity.from_heightfield(g, s, BUILDING, 24, voxel_size=0.5, origin=(100.0, 200.0, -0.5))
+    return Occupancy.from_heightfield(g, s, BUILDING, 24, voxel_size=0.5, origin=(100.0, 200.0, -0.5))
 
 
 def volume(q):

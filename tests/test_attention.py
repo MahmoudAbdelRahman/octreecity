@@ -5,17 +5,17 @@ torch = pytest.importorskip("torch")
 
 from octreecity.attention import LinkModel, fit, predict  # noqa: E402
 from octreecity.build import build  # noqa: E402
-from octreecity.columns import ColumnCity  # noqa: E402
 from octreecity.learn import tokens  # noqa: E402
 from octreecity.links import hierarchy, neighbours  # noqa: E402
+from octreecity.occupancy import Occupancy  # noqa: E402
 from octreecity.rules import mixed  # noqa: E402
-from octreecity.sources import ColumnSource  # noqa: E402
+from octreecity.sources import OccupancySource  # noqa: E402
 
 
 def tile(seed):
     rng = np.random.default_rng(seed)
     h = np.where(rng.random((32, 32)) < 0.3, rng.integers(1, 12, (32, 32)), 0).astype(float)
-    t = build(ColumnSource(ColumnCity.from_heightfield(np.zeros_like(h), h, 2, 16)), mixed(), 3).balance(6)
+    t = build(OccupancySource(Occupancy.from_heightfield(np.zeros_like(h), h, 2, 16)), mixed(), 3).balance(6)
     t.cells["built"] = (t.label == 2).astype(float)
     sel = t.in_box((0, 0, 0), (32, 32, 1))
     # target: share of built cells nearby (a smooth function of the geometry)

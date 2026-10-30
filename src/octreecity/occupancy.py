@@ -1,4 +1,8 @@
-"""Column store: each (x, y) column of voxels as runs of equal labels along z.
+"""Occupancy: the semantic occupancy of a place, which voxels are filled and
+by what class (here "occupancy" never means people). Attributes are kept
+apart and given to OccupancySource.
+
+Storage: each (x, y) column of voxels as runs of equal labels along z.
 
 A city is mostly vertical walls, flat roofs and layers. Run-length coding
 along z stores a wall once per column instead of once per voxel, so the
@@ -22,7 +26,7 @@ from .octree import LinearOctree
 
 
 @dataclass
-class ColumnCity:
+class Occupancy:
     shape: tuple
     offsets: np.ndarray
     top: np.ndarray
@@ -105,7 +109,7 @@ class ColumnCity:
         c = self.voxel_size
         name = (lambda v: self.classes.name(v)) if self.classes is not None else str
         labs = [name(int(v)) for v in np.unique(self.label) if v != EMPTY]
-        return (f"ColumnCity {nx * c:g} x {ny * c:g} x {nz * c:g} m at {c:g} m cells "
+        return (f"Occupancy {nx * c:g} x {ny * c:g} x {nz * c:g} m at {c:g} m cells "
                 f"({nx} x {ny} columns, {self.n_runs:,} runs, {self.nbytes / 1e6:.1f} MB in memory)\n"
                 f"  contains: {', '.join(labs)}\n"
                 f"  origin: ({self.origin[0]:.1f}, {self.origin[1]:.1f}, {self.origin[2]:.1f}) m"
@@ -116,7 +120,7 @@ class ColumnCity:
         c = self.voxel_size
         i0, j0 = int(round(x / c)), int(round(y / c))
         i1, j1 = min(self.shape[0], i0 + int(round(width / c))), min(self.shape[1], j0 + int(round(depth / c)))
-        sub = ColumnCity.from_dense(self.to_dense(i0, i1)[:, j0:j1], c,
+        sub = Occupancy.from_dense(self.to_dense(i0, i1)[:, j0:j1], c,
                                     (self.origin[0] + i0 * c, self.origin[1] + j0 * c, self.origin[2]))
         sub.crs, sub.classes = self.crs, self.classes
         return sub
@@ -164,7 +168,7 @@ class ColumnCity:
     def to_octree(self, max_level):
         """Octree of the same voxels: the smallest tree whose leaves each hold
         one class. Built top-down from the runs (octreecity.build with
-        ColumnSource and the mixed() rule), without a voxel grid.
+        OccupancySource and the mixed() rule), without a voxel grid.
 
         The box is topped up with empty space to a multiple of the largest
         cell (2**max_level voxels) in x, y and z, so any city size works: the
@@ -173,9 +177,9 @@ class ColumnCity:
         """
         from .build import build
         from .rules import mixed
-        from .sources import ColumnSource
+        from .sources import OccupancySource
 
-        return build(ColumnSource(self), mixed(), max_level)
+        return build(OccupancySource(self), mixed(), max_level)
 
     # --------------------------------------------------------------------- io
 

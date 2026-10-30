@@ -236,6 +236,9 @@ class Store:
             raise ValueError("no tile in that region")
         nz = max(t.shape[2] for t in have)
         z0 = have[0].origin[2]
+        if any(abs(t.origin[2] - z0) > 1e-6 * self.voxel_size for t in have):
+            raise ValueError("these tiles start at different heights (origin z); build them with the "
+                             "same z origin to join them")
         layers = self._m["layers"]
         rows = []
         for i in range(i0, i1):

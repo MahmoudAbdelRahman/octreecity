@@ -426,6 +426,15 @@ class Group:
     def centres(self):
         return self.q.centres[self.idx]
 
+    def show(self, **kw):
+        """Draw these cells in 3D as wire cubes at their real size, coloured
+        by cell size, with the buildings around (octreecity.viz.show_selection;
+        needs octreecity[viz]). Several groups in one view:
+        show_octree(tree, cells={"a": g1, "b": g2})."""
+        from .viz import show_selection
+
+        return show_selection(self.q.tree, self, **kw)
+
     def sizes_m(self):
         return self.q.tree.sizes_m()[self.idx]
 

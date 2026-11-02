@@ -1,6 +1,6 @@
 [project]
 name = "octreecity"
-version = "0.4.0"
+version = "0.4.1"
 description = "Adaptive octree cells for 3D space and AI: any data source, your own classes and split rules, cell tables, links and arrays for PyTorch; city tools for storage, sun and sky analysis, 3D views, mesh and CFD export"
 authors = [{ name = "Mahmoud AbdelRahman" }]
 license = "MIT"

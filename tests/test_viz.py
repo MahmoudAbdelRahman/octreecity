@@ -69,7 +69,8 @@ def test_wire_hides_smallest_when_too_many():
 
 
 def test_setup_notebook_colab(monkeypatch):
-    import sys, types
+    import sys
+    import types
 
     import plotly.io as pio
 
@@ -79,3 +80,73 @@ def test_setup_notebook_colab(monkeypatch):
     monkeypatch.setitem(sys.modules, "google.colab", types.ModuleType("google.colab"))
     assert setup_notebook() == "colab"
     pio.renderers.default = old
+
+
+def selection_tree():
+    import shapely
+
+    from octreecity.builder import CityBuilder
+    from octreecity.features import Features
+
+    b = CityBuilder(0, 0, 64, 64)
+    ids = b.objects.add("test", ["a", "b"], "building")
+    b.add_buildings(Features([shapely.box(10, 10, 20, 30), shapely.box(40, 30, 50, 40)], height=[20, 8]), ids=ids)
+    return b.build(air_above=6).to_octree(4), ids
+
+
+def wire_names(fig):
+    return [t.name for t in fig.data if t.type == "scatter3d"]
+
+
+def test_any_group_draws():
+    t, ids = selection_tree()
+    g = t.select(id=ids[0])
+    for sel in (g, g.neighbours(steps=2), g.within(5.0), g.siblings(), t.select(where=lambda c: c["z"] > 10)):
+        f = sel.show()
+        names = wire_names(f)
+        assert names and all("m cells" in n for n in names)
+        assert any(tr.type == "mesh3d" and "context" in tr.name and tr.opacity < 1 for tr in f.data)
+        drawn = sum(len([x for x in tr.x if x is None]) for tr in f.data if tr.type == "scatter3d")
+        assert drawn <= 12 * len(sel)                       # at most 12 edges per cube (shared edges merged)
+    # the cubes sit in the same frame as show_octree(style="wire")
+    from octreecity.viz import show_octree
+
+    whole = show_octree(t, style="wire")
+    xs = [x for tr in whole.data if tr.type == "scatter3d" for x in tr.x if x is not None]
+    xg = [x for tr in g.show().data if tr.type == "scatter3d" for x in tr.x if x is not None]
+    assert min(xs) <= min(xg) and max(xg) <= max(xs)
+    assert min(xg) == 10.0 and max(xg) == 20.0            # the building's own footprint, in metres from the corner
+
+
+def test_several_groups_one_colour_each():
+    from octreecity.viz import show_octree
+
+    t, ids = selection_tree()
+    g = t.select(id=ids[0])
+    f = show_octree(t, style="wire", cells={"building": g, "neighbours": g.neighbours(steps=1),
+                                            "other": t.select(id=ids[1])})
+    w = [tr for tr in f.data if tr.type == "scatter3d"]
+    assert [tr.legendgroup for tr in w] == ["building", "neighbours", "other"]
+    assert len({tr.line.color for tr in w}) == 3
+    assert w[0].name == f"building ({len(g):,} cells)"
+    # masks and plain indices work too; nothing selected still draws
+    assert wire_names(show_octree(t, cells=t.label == BUILDING))
+    assert show_octree(t, cells=np.zeros(0, int)).layout.title.text == "No cells selected"
+
+
+def test_big_selection_is_thinned_evenly_with_a_note():
+    t, ids = selection_tree()
+    g = t.select(where=lambda c: c["label"] == 0)
+    cap = len(g) // 4
+    f = g.show(max_cells=cap)
+    names = wire_names(f)
+    assert any("drawn (evenly spread)" in n for n in names)
+    sizes = {n for n in names if n.endswith("m cells")}
+    assert len(sizes) == len(np.unique(t.level[g.idx]))      # every size still shows
+    edges = sum(len([x for x in tr.x if x is None]) for tr in f.data
+                if tr.type == "scatter3d" and tr.name.endswith("m cells"))
+    assert edges <= 12 * cap
+    from octreecity.viz import show_octree
+
+    f2 = show_octree(t, cells={"air": g}, max_cells=cap)
+    assert "drawn)" in wire_names(f2)[0] and any("evenly" in n for n in wire_names(f2))

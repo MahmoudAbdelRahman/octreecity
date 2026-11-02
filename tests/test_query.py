@@ -227,3 +227,23 @@ def test_short_user_code(city):
     out = tree.select(id=bid[4]).neighbours(steps=1).objects()
     assert out.dtype == np.int64
     assert isinstance(tree.select(id=bid[4]).table(), type(tree.objects))
+
+
+def test_cells_without_class_names():
+    from octreecity import ObjectTable, Occupancy
+
+    o = ObjectTable()
+    ids = o.add("demo", ["a"], "building")
+    lab = np.zeros((16, 16, 8), np.uint8)
+    idv = np.full(lab.shape, -1, np.int64)
+    lab[2:6, 2:6, :4] = 1
+    idv[2:6, 2:6, :4] = ids[0]
+    c = Occupancy.from_dense(lab, voxel_size=1.0, ids={"id": idv})
+    c.objects = o
+    tree = c.to_octree(4)
+    assert tree.classes is None
+    cols = tree.select(id=ids[0]).cells()
+    assert "class" not in cols
+    assert (cols["label"] == 1).all() and (cols["id"] == ids[0]).all()
+    with pytest.raises(ValueError, match="no classes"):
+        tree.select(where=lambda v: v["class"] == "building")

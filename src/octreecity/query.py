@@ -283,7 +283,8 @@ class CellView:
         self.q, self.idx = q, idx
 
     def keys(self):
-        return ["label", "class", "level", "size_m", "x", "y", "z"] + list(self.q.tree.cells)
+        names = ["class"] if self.q.tree.classes is not None else []   # class needs class names
+        return ["label", *names, "level", "size_m", "x", "y", "z"] + list(self.q.tree.cells)
 
     def _sub(self, a):
         return a if self.idx is None else a[self.idx]

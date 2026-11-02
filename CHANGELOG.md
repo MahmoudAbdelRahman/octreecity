@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `g.cells()` and `g.to_pandas()` no longer fail on a tree without class
+  names (`tree.classes` is None): the `class` column is left out.
+
 ## 0.4.1
 
 ### New

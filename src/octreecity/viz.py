@@ -439,8 +439,8 @@ def _wire_by_value(tree, full, drawn, col, nan):
             m = val[tree.level[val] == L]
             n_all = int(((tree.level[full] == L) & ~col.missing[full]).sum())
             name = f"{(1 << int(L)) * tree.voxel_size:g} m cells" + (f" ({m.size:,} of {n_all:,} drawn)" if m.size < n_all else "")
-            traces.append(_edge_trace(_cube_segments(tree, m, seam), name, width=2.0 if k == 0 else 1.4,
-                                      values=_compact(np.repeat(col.values[m], 12), col.cmin, col.cmax)))
+            traces.append(_cube_paths(tree, m, seam, name, width=2.0 if k == 0 else 1.4,
+                                      values=_compact(col.values[m], col.cmin, col.cmax)))
     else:
         counts, dc = col.counts(full), col.counts(drawn)
         present = np.nonzero(counts)[0]
@@ -452,15 +452,40 @@ def _wire_by_value(tree, full, drawn, col, nan):
         for key, ks in bins.items():
             m = val[np.isin(codes, ks)]
             name = str(key) if many else f"{col.names[key]} ({_count(int(counts[key]), int(dc[key]))})"
-            traces.append(_edge_trace(_cube_segments(tree, m, seam), name, color=col.colors[ks[0]], width=2.0,
-                                      legend=not many))
+            traces.append(_cube_paths(tree, m, seam, name, color=col.colors[ks[0]], width=2.0, legend=not many))
         if many:
             traces.append(_hidden_note(f"{present.size:,} different {col.name} values (colours repeat)"))
     miss = drawn[col.missing[drawn]]
     if nan == "grey" and miss.size:
-        traces.append(_edge_trace(_cube_segments(tree, miss, seam), "no value", color=_rgba(MISSING, 0.55),
-                                  width=1.0, legend=False))
+        traces.append(_cube_paths(tree, miss, seam, "no value", color=_rgba(MISSING, 0.55), width=1.0, legend=False))
     return traces + _missing_key(col, full, drawn, nan)
+
+
+# one path along all 12 edges of a cube (3 edges twice): 16 corners, against 36 points for 12 segments
+_CUBE_PATH = [0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 5, 1, 2, 6, 7, 3]
+
+
+def _cube_paths(tree, idx, inset, name, color=None, width=1.5, legend=True, values=None):
+    """Wire cubes of leaves idx, each its own line (inset so that cubes
+    never share an edge): every cube shows its 12 edges in its own colour.
+    values: one number per cube, on the figure's colour scale."""
+    import plotly.graph_objects as go
+
+    c = tree.voxel_size
+    X, Y, Z = (v[idx] for v in tree.corners())
+    corner = np.stack([X, Y, Z], 1) * c + np.array([0, 0, tree.origin[2]]) + inset
+    size = (tree.sizes()[idx] * c - 2 * inset)[:, None, None]
+    pts = np.round(corner[:, None, :] + _CUBE[_CUBE_PATH][None] * size, 3)       # (n, 16, 3)
+    n, k = len(idx), len(_CUBE_PATH) + 1
+    xyz = [np.full((n, k), None, dtype=object) for _ in range(3)]               # None ends each cube
+    for a in range(3):
+        xyz[a][:, :-1] = pts[:, :, a]
+    xs, ys, zs = (v.ravel().tolist() for v in xyz)
+    line = dict(color=color, width=width)
+    if values is not None:
+        line = dict(color=np.repeat(np.asarray(values), k), coloraxis="coloraxis", width=width)
+    return go.Scatter3d(x=xs, y=ys, z=zs, mode="lines", connectgaps=False, name=name, line=line,
+                        hoverinfo="skip", showlegend=legend)
 
 
 def _quad_mesh(q, name, legend=True, share=False, quantum=1e-3, **kw):
@@ -505,7 +530,7 @@ def _faces_by_value(q, cell, col, nan, name, opacity=1.0, lighting=_FLAT, legend
             v = col.values[cell[ok]]
             paint = dict(intensity=_compact(np.concatenate([v, v]), col.cmin, col.cmax), intensitymode="cell",
                          coloraxis="coloraxis")
-            text = np.char.mod("%.12g", v) if hover else None     # short for short numbers, exact for ids, epochs
+            text = _numbers(v) if hover else None
         else:
             fc = col.hex(cell[ok])
             paint = dict(facecolor=np.concatenate([fc, fc]))
@@ -520,6 +545,16 @@ def _faces_by_value(q, cell, col, nan, name, opacity=1.0, lighting=_FLAT, legend
                               color=MISSING,
                               hovertemplate=f"{col.name}: no value<extra></extra>", **common))
     return out
+
+
+def _numbers(v):
+    """Numbers as short text: the fewest significant digits (4 to 15) that
+    keep different values apart (35.5, 3.333, 1700000000.25)."""
+    u = np.unique(v[np.isfinite(v)])
+    for d in (4, 6, 8, 10, 12, 15):
+        if np.unique(np.char.mod(f"%.{d}g", u)).size == u.size:
+            break
+    return np.char.mod(f"%.{d}g", v)
 
 
 def _plane_quads(tree, ix, axis, at, gap=0.0, upto=None):
@@ -795,8 +830,8 @@ def show_selection(tree, cells, title=None, height=700, max_cells=None, context=
         "distance"), or an array with one value per leaf or per selected
         cell (in leaf order, as g.idx). The colour scale spans the
         selection's values unless cmin / cmax are given.
-    max_cells: at most this many cubes (default 15,000 wire or 40,000
-        filled cubes: a figure of about 10 MB), so the view stays
+    max_cells: at most this many cubes (default 15,000 wire or 25,000
+        filled cubes: a figure of up to about 10 MB), so the view stays
         responsive. Past it every size is still drawn: the most numerous
         sizes are thinned evenly (every k-th cell in Morton order, spread
         over the whole selection), and the legend says how many are drawn.
@@ -810,7 +845,7 @@ def show_selection(tree, cells, title=None, height=700, max_cells=None, context=
     if style not in ("wire", "cubes"):
         raise ValueError(f"style={style!r}: a selection is drawn as 'wire' or 'cubes'")
     cubes = style == "cubes"
-    max_cells = (40_000 if cubes else 15_000) if max_cells is None else max_cells
+    max_cells = (25_000 if cubes else 15_000) if max_cells is None else max_cells
     named = isinstance(cells, dict)
     if named and color is not None:
         raise ValueError("color= colours one selection by a value; with {name: group} each group has its "
@@ -871,7 +906,8 @@ def show_selection(tree, cells, title=None, height=700, max_cells=None, context=
 
 
 def show_octree(tree, style=None, title=None, height=700, cut=None, max_cells=None, cells=None,
-                color=None, colorscale=None, cmin=None, cmax=None, nan="grey", max_faces=200_000):
+                color=None, colorscale=None, cmin=None, cmax=None, nan="grey", max_faces=200_000,
+                opacity=1.0):
     """3D view of an adaptive octree.
 
     style="shells" (the default): nested see-through envelopes; shell k
@@ -888,8 +924,9 @@ def show_octree(tree, style=None, title=None, height=700, cut=None, max_cells=No
     cells: draw only a selection (see show_selection): a Group, a mask or
         leaf indices (coloured by size), or {name: group} (one colour per
         name), as wire cubes (style "wire", the default) or filled cubes
-        (style="cubes"); other styles give a warning. max_cells thins the
-        selection evenly instead of hiding the smallest sizes.
+        (style="cubes", opacity= for see-through cubes); other styles give
+        a warning. max_cells thins the selection evenly instead of hiding
+        the smallest sizes.
 
     color: colour the cells by a value instead of by size, in every style:
         a tree.cells column name, a built-in column ("size_m", "z",
@@ -907,11 +944,12 @@ def show_octree(tree, style=None, title=None, height=700, cut=None, max_cells=No
           array to choose the other way.
         - nan="grey" draws cells without a value (NaN, None, id -1) in grey;
           nan="hide" leaves them out. The legend counts them.
-        With color=, a wire view past max_cells (15,000: about 9 MB) is
-        thinned evenly (every size kept, every k-th cell) and the legend
+        With color=, a wire view past max_cells (15,000: about 7 MB) is
+        thinned evenly (every size kept, evenly spaced cells) and the legend
         says how many are drawn. Shells by value draw one face per cell, so
-        they are several times bigger than plain shells; past
-        max_faces (200,000) they stop with a message: crop a smaller block.
+        they are several times bigger than plain shells (a 160 m block:
+        about 7 MB); past max_faces (200,000) they stop with a message: crop
+        a smaller block.
     """
     import plotly.graph_objects as go
 
@@ -926,7 +964,7 @@ def show_octree(tree, style=None, title=None, height=700, cut=None, max_cells=No
                           "shells of the whole tree.", UserWarning, stacklevel=2)
         return show_selection(tree, cells, title=title, height=height, max_cells=max_cells, color=color,
                               colorscale=colorscale, cmin=cmin, cmax=cmax, nan=nan,
-                              style="cubes" if style == "cubes" else "wire")
+                              style="cubes" if style == "cubes" else "wire", opacity=opacity)
     style = "shells" if style is None else style
     if style == "cubes":
         raise ValueError("style='cubes' draws a selection of cells: pass cells= (for example the cells along "

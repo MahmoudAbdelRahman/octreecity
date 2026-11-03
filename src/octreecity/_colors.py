@@ -12,7 +12,9 @@ import numbers
 import numpy as np
 
 PALETTE = ["#4dabf7", "#ff6b6b", "#ffd43b", "#69db7c", "#da77f2", "#ffa94d",
-           "#3bc9db", "#f783ac", "#a9e34b", "#9775fa", "#e8590c", "#20c997"]
+           "#3bc9db", "#f783ac", "#a9e34b", "#9775fa", "#e8590c", "#20c997",
+           "#c2b280", "#875692", "#008856", "#0067a5", "#be0032", "#f99379",
+           "#dcd300", "#b3446c"]       # 20: up to LEGEND_MAX categories in a view never share a colour
 MISSING = "#80858d"
 FEW = 12            # integers with at most this many different values are categories
 LEGEND_MAX = 20     # more categories than this: colours repeat, no entry per category
@@ -140,11 +142,11 @@ def _plain(a):
     return a, miss
 
 
-def _categorical(tree, name, a):
+def _categorical(tree, name, a, miss):
     if a.dtype.kind in "OUSb":
         return True
     if a.dtype.kind in "iu":
-        return _is_id_name(tree, name) or name == "level" or np.unique(a).size <= FEW
+        return _is_id_name(tree, name) or name == "level" or np.unique(a[~miss]).size <= FEW
     return False
 
 
@@ -168,7 +170,7 @@ def resolve(tree, color, idx=None, colorscale="Viridis", cmin=None, cmax=None, c
     where = slice(None) if aligned == "all" else view
     a, miss = _plain(a)
 
-    if _categorical(tree, name, a):
+    if _categorical(tree, name, a, miss):
         is_id = _is_id_name(tree, name)
         if a.dtype.kind in "iu":
             if not (a.dtype == np.uint64 and a.size and a.max() > np.iinfo(np.int64).max):
@@ -215,6 +217,9 @@ def _range(seen, cmin, cmax):
         if float(cmax) <= float(cmin):
             raise ValueError(f"cmax={cmax} must be above cmin={cmin}")
         return float(cmin), float(cmax)
+    if not seen.size:                                 # nothing to compare with: one unit from the bound
+        return (float(cmin), float(cmin) + 1) if cmin is not None else \
+               ((float(cmax) - 1, float(cmax)) if cmax is not None else (0.0, 1.0))
     if cmin is not None:
         if hi <= float(cmin):
             raise ValueError(f"cmin={cmin} is not below the largest value ({hi:g}); give cmax too")
@@ -232,10 +237,20 @@ def _pick(colors, key, label, k):
     for c in (key, label):
         try:
             if c in colors:
-                return colors[c]
+                return _hex(colors[c])
         except TypeError:
             pass
     return PALETTE[k % len(PALETTE)]
+
+
+def _hex(color):
+    """A colour as text: (r, g, b) in 0..1 or 0..255 becomes '#rrggbb';
+    names and '#...' / 'rgb(...)' text pass through."""
+    if isinstance(color, (tuple, list, np.ndarray)):
+        rgb = [float(v) for v in list(color)[:3]]
+        scale = 255.0 if max(rgb) <= 1.0 else 1.0
+        return "#" + "".join(f"{int(round(min(max(v * scale, 0), 255))):02x}" for v in rgb)
+    return str(color)
 
 
 def _labels(tree, name, style, colors):
@@ -247,6 +262,6 @@ def _labels(tree, name, style, colors):
         nm = names[L] if names is not None and L < len(names) else style.get(L, (f"label {L}", None))[0]
         label.append(nm)
         default = style.get(L, (None, None))[1] or PALETTE[k % len(PALETTE)]
-        pal.append(colors.get(L, colors.get(nm, default)))
+        pal.append(_hex(colors.get(L, colors.get(nm, default))))
     codes = np.searchsorted(keys, lab).astype(np.int64)
     return Coloring(name, False, np.zeros(tree.n_leaves, bool), codes=codes, names=label, colors=pal)

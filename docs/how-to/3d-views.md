@@ -52,8 +52,8 @@ show_octree(tree, style="wire", cells={"building": g,                       # on
 
 The views use the frame of `show_octree`, so they line up with it. A group
 can also be a mask over the leaves (`tree.label == BUILDING`) or a list of
-leaf numbers. Past `max_cells` cubes (15,000) the most numerous sizes are
-thinned evenly (every k-th cell, spread over the whole selection) and the
+leaf numbers. Past `max_cells` cubes (15,000 wire, 25,000 filled) the most
+numerous sizes are thinned evenly (spread over the whole selection) and the
 legend says how many are drawn, so big selections stay quick and keep their
 shape; select a smaller area to see every cell. `context=()` leaves out the
 buildings around.
@@ -75,7 +75,7 @@ from octreecity.analysis import sun_hours
 from octreecity.render import plot_slice
 from octreecity.viz import show_cells, show_octree
 
-block = city.crop(0, 0, 256, 256)
+block = city.crop(0, 0, 160, 160)                       # views of a 160 m block stay under ~10 MB
 tree = block.to_octree(4)
 
 tree.cells["height"] = fill.from_function(tree, lambda x, y, z: z)   # any value per cell
@@ -108,7 +108,8 @@ plot_slice(tree, ax, axis="y", color="sun_hours")        # a section as an image
   `cmax=`. By default the scale spans the values of the whole tree (of the
   selection for `g.show`), so a cut, a crop of the view or thinning never
   changes the colours.
-- **Categories** get one distinct colour each and a legend, never a
+- **Categories** get one distinct colour each (up to 20 in a view; past
+  that colours repeat and the legend says so) and a legend, never a
   gradient: text, `True`/`False`, `class` and `label`, object ids (columns in
   `tree.id_columns`, `"id"` or `"..._id"`) and integers with at most 12
   different values. Ids stay exact integers (-1 is "no value", -2 "mixed").
@@ -123,13 +124,21 @@ What each view colours: `g.show(style="cubes")` (or
 cube, with thin seams between cells and `opacity=` for see-through cubes;
 faces between two drawn cells are left out, so a layer of cells reads as a
 skin. `wire` draws the edges of the air cells (use `cells=` or `g.show` for
-others); `cutaway`, `show_cells` and `plot_slice` colour every cell on the
-cut; `shells` the outer faces of each shell, by the cell inside. Past
-`max_cells` (15,000 wire cubes or 40,000 filled cubes, a figure of about
-10 MB) views are thinned evenly, every size kept, and the legend says how
-many cells are drawn. Shells by value draw one face per cell, several times
-bigger than plain shells: a block of about 250 m is fine (about 10 MB);
+others); by value, each cube sits a hair inside its cell so that it shows
+all 12 of its own edges in its own colour. `cutaway`, `show_cells` and
+`plot_slice` colour every cell on the cut (`cut=(x, y)` and `y=` are metres
+from the tree's corner, not absolute coordinates); `shells` the outer faces
+of each shell, by the cell inside. Past
+`max_cells` (15,000 wire cubes, about 7 MB, or 25,000 filled cubes, up to
+about 10 MB) views are thinned evenly, every size kept, and the legend says
+how many cells are drawn. Shells by value draw one face per cell, several
+times bigger than plain shells: a block of about 160 m is fine (about 7 MB);
 bigger ones stop with a message to crop.
+
+Integer columns from `fill.from_points(how="mode")` hold -1 where a cell
+has no point. -1 counts as "no value" only for id columns, so mark it
+yourself: `color=np.where(tree.cells["use"] == -1, None, tree.cells["use"])`
+(the integers stay exact).
 
 Big areas are simplified for display only (`step`, chosen automatically to
 keep views quick); the data is not changed. Save a view as a web page with

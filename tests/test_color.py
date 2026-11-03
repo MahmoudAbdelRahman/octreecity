@@ -65,8 +65,7 @@ def test_thinning_keeps_colours_and_says_how_many_are_drawn():
     names = legend(thin)
     assert any(f"of {n_air:,} air cells drawn" in n for n in names)
     assert len(names) == len(set(names))
-    cubes = sum(np.sum([x is None for x in tr.x]) for tr in scatter(thin) if len(tr.x) > 1) / 12
-    assert cubes <= n_air // 5
+    assert _lines(thin) <= n_air // 5
     sizes = {n.split(" m cells")[0] for n in names if " m cells" in n}
     assert len(sizes) == len(np.unique(t.level[t.label == AIR]))     # every size still drawn
 
@@ -284,8 +283,7 @@ def test_hidden_cells_are_not_counted_as_drawn():
     note = [n for n in legend(f) if "air cells drawn" in n][0]
     drawn = int(note.split(" of ")[0].replace(",", ""))
     assert f"of {pool:,} air cells" in note
-    cubes = sum(np.sum([x is None for x in tr.x]) for tr in scatter(f) if len(tr.x) > 1) / 12
-    assert cubes == drawn                                      # each cube draws its own 12 edges
+    assert _lines(f) == drawn                                  # one line per cube drawn
 
 
 # ------------------------------------------------------------ filled cubes
@@ -425,16 +423,27 @@ def test_trees_split_by_a_value_show_their_cells():
 # ------------------------------------------- regressions from the stress test
 
 def _segments(fig):
-    """(start, end, value or colour) of every wire edge."""
+    """(start, end, value or colour) of every drawn line piece; lines end at None."""
     out = []
     for tr in scatter(fig):
         if len(tr.x) < 2:
             continue
         cols = tr.line.color if tr.line.coloraxis else [tr.line.color] * len(tr.x)
-        for k in range(0, len(tr.x), 3):
-            out.append((np.array([tr.x[k], tr.y[k], tr.z[k]], float),
-                        np.array([tr.x[k + 1], tr.y[k + 1], tr.z[k + 1]], float), cols[k]))
+        prev = None
+        for k in range(len(tr.x)):
+            if tr.x[k] is None:
+                prev = None
+                continue
+            p = np.array([tr.x[k], tr.y[k], tr.z[k]], float)
+            if prev is not None:
+                out.append((prev, p, cols[k]))
+            prev = p
     return out
+
+
+def _lines(fig):
+    """Number of separate lines (one per wire cube drawn by value)."""
+    return sum(sum(x is None for x in tr.x) for tr in scatter(fig) if len(tr.x) > 1)
 
 
 def test_each_wire_cube_draws_its_own_edges_in_its_own_value():
@@ -445,10 +454,11 @@ def test_each_wire_cube_draws_its_own_edges_in_its_own_value():
     v = np.zeros(t.n_leaves)
     hot = int(t.locate(3, 4, 5))
     v[hot] = 100.0
-    segs = _segments(show_octree(t, style="wire", color=v))
-    assert len(segs) == 12 * t.n_leaves                       # no edge shared, none lost
-    mine = [s for s in segs if float(s[2]) == 100.0]
-    assert len(mine) == 12
+    f = show_octree(t, style="wire", color=v)
+    assert _lines(f) == t.n_leaves                            # one line per cube: no edge shared
+    mine = [s for s in _segments(f) if float(s[2]) == 100.0]
+    edges = {tuple(sorted((tuple(np.round(a, 4)), tuple(np.round(b, 4))))) for a, b, _ in mine}
+    assert len(edges) == 12                                   # all 12 edges in the cell's own value
     pts = np.array([p for s in mine for p in s[:2]])
     assert pts.min() >= 3 + _SEAM - 1e-6 and (pts <= np.array([4, 5, 6]) - _SEAM + 1e-6).all()
 
@@ -612,3 +622,39 @@ def test_many_classes_are_not_drawn_as_buildings():
     for f in (show_octree(t, style="cutaway", color="z"), show_octree(t, style="wire", color="z"),
               show_selection(t, t.label == AIR)):
         assert not any(tr.type == "mesh3d" and tr.name.startswith("buildings") for tr in f.data)
+
+
+def test_review_round_fixes():
+    pd = pytest.importorskip("pandas")
+    mpl = pytest.importorskip("matplotlib")
+    mpl.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_hex
+
+    from octreecity.render import plot_slice
+
+    t = tree()
+    n = t.n_leaves
+    t.cells["kind"] = np.where(t.centers()[:, 2] > 8, "high", "low")
+    pc = plot_slice(t, plt.subplots()[1], color="kind", colors={"high": (1.0, 0.0, 0.0), "low": (0, 0, 255)})
+    assert {to_hex(c) for c in pc.get_facecolors()} >= {"#ff0000", "#0000ff"}       # tuples work
+    plt.close("all")
+    t.cells["zone"] = (t.centers()[:, 0] // 2).astype(np.int64) % 18                # 16..18 categories
+    f = show_octree(t, style="wire", color=t.cells["zone"].astype(str))
+    swatches = [tr.line.color for tr in scatter(f) if len(tr.x) > 1 and tr.name != "no value"]
+    assert len(swatches) == len(set(swatches)) > 12                                  # all distinct
+    twelve = pd.Series([None if i % 5 == 0 else i % 12 for i in range(n)], dtype="Int64")
+    assert not show_octree(t, style="cutaway", color=twelve).layout.coloraxis.colorbar.title.text   # categories
+    empty = np.full(n, np.nan)
+    f = show_octree(t, style="cutaway", color=empty, cmax=5)
+    assert (f.layout.coloraxis.cmin, f.layout.coloraxis.cmax) == (4, 5)
+    g = t.select(where=lambda c: c["label"] == BUILDING).neighbours(steps=1)
+    f = show_octree(t, cells=g, style="cubes", color="height", opacity=0.4)
+    assert all(tr.opacity == 0.4 for tr in f.data if tr.type == "mesh3d" and "context" not in tr.name)
+
+
+def test_hover_text_is_short_but_tells_values_apart():
+    from octreecity.viz import _numbers
+
+    assert list(_numbers(np.array([35.5, 3.0 + 1 / 3]))) == ["35.5", "3.333"]
+    assert len(set(_numbers(np.array([1.7e9, 1.7e9 + 0.25])))) == 2

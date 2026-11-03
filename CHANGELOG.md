@@ -24,7 +24,7 @@
   - Cells without a value (NaN, None, id -1): grey or hidden
     (`nan="grey" | "hide"`), counted in the legend. On cuts, buildings
     without a value keep their own colour.
-  - Views past `max_cells` (15,000 wire or 40,000 filled cubes) are thinned
+  - Views past `max_cells` (15,000 wire or 25,000 filled cubes) are thinned
     evenly, every size kept, and the legend says how many cells are drawn.
   - How-to: "Data on cells" in docs/how-to/3d-views.md.
 
@@ -37,6 +37,13 @@
   cells" and "1 m cells: 2,000 of 8,000 drawn"); now once, with the counts.
 - Even thinning now uses the whole `max_cells` budget (it could draw about
   half of it).
+- Wire cubes were placed on a 0.1 m grid (wrong cells for 0.25 m voxels);
+  now to the millimetre.
+- `cut=`, `y=` (and `plot_slice` `index=`) outside the block gave an empty
+  view; now an error that gives the valid range (metres from the tree's
+  corner, not absolute coordinates).
+- Trees with more than 254 classes: classes 258, 259 ... were drawn as
+  buildings and trees in the 3D views.
 
 ## 0.4.3
 

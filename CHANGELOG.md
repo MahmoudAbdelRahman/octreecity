@@ -7,6 +7,11 @@
 - Data on cells, seen: `color=` colours any cell by a value in every view:
   `show_octree` (wire cubes, cutaway faces, shells), `show_selection` /
   `g.show()`, `show_cells` and `render.plot_slice`.
+  - The cells themselves take the colour, at their real size: filled
+    cubes (`g.show(style="cubes")`, `show_octree(cells=g, style="cubes")`,
+    thin seams between cells, `opacity=`), wire cubes, cut faces and
+    sections, shell faces. Works on any tree, also trees split where a
+    value changes (`build(..., varies(...))`, `adapt`).
   - A `tree.cells` column name, a built-in column (`size_m`, `z`, `level`,
     `class`, `label` ...), a group value (`steps`, `distance`) or an array
     with one value per cell.
@@ -19,8 +24,8 @@
   - Cells without a value (NaN, None, id -1): grey or hidden
     (`nan="grey" | "hide"`), counted in the legend. On cuts, buildings
     without a value keep their own colour.
-  - Wire views past `max_cells` (15,000 with `color=`) are thinned evenly,
-    every size kept, and the legend says how many cells are drawn.
+  - Views past `max_cells` (15,000 wire or 40,000 filled cubes) are thinned
+    evenly, every size kept, and the legend says how many cells are drawn.
   - How-to: "Data on cells" in docs/how-to/3d-views.md.
 
 ### Fixed
@@ -30,6 +35,8 @@
   error.
 - A thinned selection listed each thinned size twice in the legend ("1 m
   cells" and "1 m cells: 2,000 of 8,000 drawn"); now once, with the counts.
+- Even thinning now uses the whole `max_cells` budget (it could draw about
+  half of it).
 
 ## 0.4.3
 

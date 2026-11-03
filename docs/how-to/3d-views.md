@@ -38,8 +38,8 @@ show_octree(small, style="wire")                # every air cell as a wire cube,
 ## Any selection of cells
 
 Any group of cells (from `tree.select`, `neighbours`, `within`, `siblings`,
-...) draws in the same wire style, at the cells' real size, with the
-buildings drawn lightly around it:
+...) draws in the same wire style, or as filled cubes (`style="cubes"`), at
+the cells' real size, with the buildings drawn lightly around it:
 
 ```python
 g = tree.select(id=building_id)
@@ -61,8 +61,11 @@ buildings around.
 ## Data on cells: colour any cell by a value
 
 Any value stored per cell in `tree.cells` can be seen in every view with
-`color=`: in the air (wire cubes), on cut faces (cutaway, sections), on the
-shells, or on any selection, such as the cells along the building facades.
+`color=`. The cells themselves take the colour, at their real size: filled
+cubes or wire cubes for any selection (such as the cells along the
+building walls), the cell squares on cut faces and sections, the faces of
+the shells. This works on any tree, also one whose cells were split where a
+value changes (`build(..., varies("sun", 1.0))`, `adapt`).
 
 ```python
 import numpy as np
@@ -87,8 +90,9 @@ show_octree(tree, style="cutaway", color="sun_hours")    # on two cut faces
 show_octree(tree, style="shells", color="sun_hours")     # on the shells by cell size
 show_cells(tree, color="sun_hours")                      # one vertical cut, 3D
 
-facade = tree.select(where=lambda c: c["label"] == 2).neighbours(steps=1)
-facade.show(color="sun_hours", nan="hide")               # the air along the walls
+walls = tree.select(where=lambda c: c["label"] == 2).neighbours(steps=1)
+walls.show(color="sun_hours", style="cubes", nan="hide") # the cells along the walls, filled
+walls.show(color="sun_hours", nan="hide")                # the same cells as wire cubes
 
 import matplotlib.pyplot as plt
 fig, ax = plt.subplots(figsize=(10, 3))
@@ -114,14 +118,18 @@ plot_slice(tree, ax, axis="y", color="sun_hours")        # a section as an image
   left out (`nan="hide"`); the legend counts them. On cut faces and
   sections, buildings and ground without a value keep their own colour.
 
-What each style colours: `wire` the air cells (use `cells=` or `g.show` for
-others); `cutaway`, `show_cells` and `plot_slice` every cell on the cut;
-`shells` the outer faces of each shell, by the cell inside. Past
-`max_cells` (15,000 cubes, a figure of about 9 MB) wire views are thinned
-evenly, every size kept, and the legend says how many cells are drawn.
-Shells by value draw one face per cell, several times bigger than plain
-shells: a block of about 250 m is fine (about 10 MB); bigger ones stop with
-a message to crop.
+What each view colours: `g.show(style="cubes")` (or
+`show_octree(tree, cells=g, style="cubes")`) fills each selected cell as a
+cube, with thin seams between cells and `opacity=` for see-through cubes;
+faces between two drawn cells are left out, so a layer of cells reads as a
+skin. `wire` draws the edges of the air cells (use `cells=` or `g.show` for
+others); `cutaway`, `show_cells` and `plot_slice` colour every cell on the
+cut; `shells` the outer faces of each shell, by the cell inside. Past
+`max_cells` (15,000 wire cubes or 40,000 filled cubes, a figure of about
+10 MB) views are thinned evenly, every size kept, and the legend says how
+many cells are drawn. Shells by value draw one face per cell, several times
+bigger than plain shells: a block of about 250 m is fine (about 10 MB);
+bigger ones stop with a message to crop.
 
 Big areas are simplified for display only (`step`, chosen automatically to
 keep views quick); the data is not changed. Save a view as a web page with

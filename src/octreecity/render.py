@@ -97,6 +97,8 @@ def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True, color=Non
     k = "xyz".index(axis)
     if index is None:
         index = tree.shape[k] // 2
+    if not 0 <= index < tree.shape[k]:
+        raise ValueError(f"index={index} is outside the tree: voxels along {axis} go from 0 to {tree.shape[k] - 1}")
     c = tree.corners()
     s = tree.sizes()
     hit = (c[k] <= index) & (index < c[k] + s)
@@ -113,6 +115,7 @@ def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True, color=Non
         nan = check_nan(nan)
         style = {L: (NAMES.get(L, "air" if L == AIR else f"label {L}"), base.get(L)) for L in base}
         col = resolve(tree, color, None, colorscale or "viridis", cmin, cmax, colors=colors, label_style=style)
+        col.focus(ix)
         miss = col.missing[ix]
         solid_miss = miss & (tree.label[ix] != AIR)
         if col.numeric:
@@ -141,22 +144,47 @@ def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True, color=Non
     ax.set_xlabel(f"{names[0]} (m)")
     ax.set_ylabel(f"{names[1]} (m)")
     if col is not None and legend:
-        _slice_key(ax, col, ix, nan, int(col.missing[ix].sum() - ((tree.label[ix] != AIR) & col.missing[ix]).sum()))
+        cut = np.nonzero(hit)[0]
+        _slice_key(ax, col, cut, nan, int((col.missing[cut] & (tree.label[cut] == AIR)).sum()))
     return pc
 
 
 def _cmap(name):
-    """A matplotlib colormap from a matplotlib or plotly name ("Viridis", "RdBu_r")."""
+    """A matplotlib colormap from a matplotlib name, a plotly name ("Viridis",
+    "Portland", "RdBu_r") or a plotly scale [[0, colour], ..., [1, colour]]."""
     import matplotlib
+    from matplotlib.colors import Colormap, LinearSegmentedColormap
 
-    if not isinstance(name, str):
+    if isinstance(name, Colormap):
         return name
-    for n in (name, name.lower()):
+    if isinstance(name, str):
+        for n in (name, name.lower()):
+            try:
+                return matplotlib.colormaps[n]
+            except KeyError:
+                continue
         try:
-            return matplotlib.colormaps[n]
-        except KeyError:
-            continue
-    raise ValueError(f"unknown colour scale {name!r}; use a matplotlib name such as 'viridis'")
+            import plotly.colors
+
+            scale, label = plotly.colors.get_colorscale(name), name
+        except Exception:
+            raise ValueError(f"unknown colour scale {name!r}; use a matplotlib or plotly name such as "
+                             "'viridis'") from None
+    else:
+        scale, label = name, "custom"
+    stops = [(float(pos), _rgb_any(col)) for pos, col in scale]
+    return LinearSegmentedColormap.from_list(label, stops)
+
+
+def _rgb_any(color):
+    """'#rrggbb', 'rgb(r, g, b)' or a matplotlib colour name -> (r, g, b) in 0..1."""
+    from matplotlib.colors import to_rgb
+
+    color = str(color).strip()
+    if color.startswith("rgb"):
+        nums = [float(v) for v in color[color.index("(") + 1:color.index(")")].split(",")[:3]]
+        return tuple(v / 255 for v in nums)
+    return to_rgb(color)
 
 
 def _norm(col):
@@ -173,7 +201,8 @@ def _slice_key(ax, col, ix, nan, n_missing_air):
     from ._colors import LEGEND_MAX, MISSING
 
     if col.numeric:
-        ax.figure.colorbar(ScalarMappable(_norm(col), _cmap(col.colorscale)), ax=ax, label=col.name, shrink=0.8)
+        if not col.empty:                                 # no value anywhere: no colour bar to read
+            ax.figure.colorbar(ScalarMappable(_norm(col), _cmap(col.colorscale)), ax=ax, label=col.name, shrink=0.8)
         handles = []
     else:
         counts = col.counts(ix)
@@ -182,7 +211,8 @@ def _slice_key(ax, col, ix, nan, n_missing_air):
             handles = [Patch(color="none", label=f"{present.size:,} {col.name} values (colours repeat)")]
         else:
             handles = [Patch(color=col.colors[j], label=f"{col.names[j]} ({counts[j]:,})") for j in present]
-    if n_missing_air and nan == "grey":
-        handles.append(Patch(color=MISSING, label=f"no value ({n_missing_air:,})"))
+    if n_missing_air:
+        handles.append(Patch(color=MISSING, label=f"no value ({n_missing_air:,})") if nan == "grey"
+                       else Patch(color="none", label=f"no value: {n_missing_air:,} hidden"))
     if handles:
         ax.legend(handles=handles, title=None if col.numeric else col.name, fontsize=8, loc="upper right")

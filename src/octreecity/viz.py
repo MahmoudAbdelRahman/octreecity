@@ -106,10 +106,11 @@ def _layout(fig, city, title, height):
     return fig
 
 
-def _edge_trace(segments, name, color="rgba(20,24,30,0.85)", width=1.5, legend=True):
+def _edge_trace(segments, name, color="rgba(20,24,30,0.85)", width=1.5, legend=True, values=None):
     """Line segments (N, 2, 3) as one Scatter3d trace. Plain lists with None
     between segments: compact typed arrays would join all segments into one
-    long line."""
+    long line. values: one number per segment, drawn on the figure's colour
+    scale (coloraxis) instead of `color`."""
     import plotly.graph_objects as go
 
     seg = np.round(np.asarray(segments, np.float64), 1)
@@ -118,14 +119,19 @@ def _edge_trace(segments, name, color="rgba(20,24,30,0.85)", width=1.5, legend=T
         lo = np.where((a[:, 0] < b[:, 0]) | ((a[:, 0] == b[:, 0]) & ((a[:, 1] < b[:, 1]) | ((a[:, 1] == b[:, 1]) & (a[:, 2] <= b[:, 2])))), 0, 1)
         canon = np.where(lo[:, None, None] == 0, seg, seg[:, ::-1])
         _, keep = np.unique(canon.reshape(len(seg), 6), axis=0, return_index=True)
-        seg = canon[np.sort(keep)]
+        keep = np.sort(keep)
+        seg = canon[keep]
+        values = None if values is None else np.asarray(values)[keep]
     xs, ys, zs = [], [], []
     for (a, b) in seg.tolist():
         xs += [a[0], b[0], None]
         ys += [a[1], b[1], None]
         zs += [a[2], b[2], None]
+    line = dict(color=color, width=width)
+    if values is not None:                         # same value at both ends and at the gap: one colour per edge
+        line = dict(color=np.repeat(np.asarray(values, np.float32), 3), coloraxis="coloraxis", width=width)
     return go.Scatter3d(x=xs, y=ys, z=zs, mode="lines", connectgaps=False, name=name,
-                        line=dict(color=color, width=width), hoverinfo="skip", showlegend=legend)
+                        line=line, hoverinfo="skip", showlegend=legend)
 
 
 def _quad_edges(q):
@@ -207,22 +213,21 @@ def show_values(city, grid, name, every=None, colorscale="Inferno", cmin=None, c
     return fig
 
 
-def show_cells(tree, y=None, title=None, height=650, max_cells=80_000):
+def show_cells(tree, y=None, title=None, height=650, max_cells=80_000, color=None, colorscale=None,
+               cmin=None, cmax=None, nan="grey"):
     """Adaptive octree cells cut by a vertical plane, as filled squares:
     air cells coloured by size, solids in their label colour, thin edges.
-    y: metres from the city edge; default: the row crossing most buildings."""
+    y: metres from the city edge; default: the row crossing most buildings.
+    color: colour the squares by a value instead (see show_octree)."""
     import plotly.graph_objects as go
+
+    if color is not None:
+        return _show_cells_by_value(tree, y, title, height, max_cells, color, colorscale, cmin, cmax, nan)
 
     c = tree.voxel_size
     X, Y, Z = tree.corners()
     S = tree.sizes()
-    if y is None:
-        b = tree.label == BUILDING
-        score = np.bincount(np.repeat(Y[b], S[b]) + np.concatenate([np.arange(s) for s in S[b]]) if b.any() else [0],
-                            minlength=tree.shape[1])
-        yv = int(np.argmax(score))
-    else:
-        yv = int(y / c)
+    yv = _cut_row(tree, y)
     hit = (Y <= yv) & (yv < Y + S)
     x0, z0, s, lab = X[hit] * c, Z[hit] * c + tree.origin[2], S[hit] * c, tree.label[hit]
     if hit.sum() > max_cells:
@@ -262,7 +267,228 @@ def show_cells(tree, y=None, title=None, height=650, max_cells=80_000):
     return fig
 
 
-SIZE_COLORS = ["#f2a65a", "#e9cf6e", "#a6cf8a", "#5fb8a8", "#4f8fc4", "#6b6fc9", "#9b6bc9"]
+def _cut_row(tree, y):
+    """Voxel row of the vertical cut: y metres, or the row crossing most buildings."""
+    if y is not None:
+        return int(y / tree.voxel_size)
+    X, Y, Z = tree.corners()
+    S = tree.sizes()
+    b = tree.label == BUILDING
+    score = np.bincount(np.repeat(Y[b], S[b]) + np.concatenate([np.arange(s) for s in S[b]]) if b.any() else [0],
+                        minlength=tree.shape[1])
+    return int(np.argmax(score))
+
+
+def _show_cells_by_value(tree, y, title, height, max_cells, color, colorscale, cmin, cmax, nan):
+    import plotly.graph_objects as go
+
+    from ._colors import check_nan
+
+    nan = check_nan(nan)
+    c = tree.voxel_size
+    col = _coloring(tree, color, None, colorscale, cmin, cmax)
+    X, Y, Z = tree.corners()
+    S = tree.sizes()
+    yv = _cut_row(tree, y)
+    yy = (yv + 0.5) * c
+    ix = np.nonzero((Y <= yv) & (yv < Y + S))[0]
+    n_cut = ix.size
+    if ix.size > max_cells:                          # biggest cells first, as without color=
+        ix = np.sort(ix[np.argsort(-S[ix], kind="stable")[:max_cells]])
+    q = _plane_quads(tree, ix, "y", yy, gap=0.08 * c)
+    traces = _cut_by_value(tree, q, ix, col, nan)
+    if ix.size < n_cut:
+        traces.append(_hidden_note(f"{ix.size:,} of {n_cut:,} cells drawn (the biggest)"))
+    fig = go.Figure(traces)
+    fig = _layout(fig, Occupancy(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
+                                  np.zeros(0, np.uint8), c, tree.origin),
+                  title or f"{col.name} on a vertical cut at y = {yy:.0f} m", height)
+    fig.update_layout(scene_camera=dict(eye=dict(x=0.0, y=-0.85, z=0.05)))
+    return _color_scale(fig, col)
+
+
+# ------------------------------------------------------- colour by value
+
+FG = "#e6e9ee"
+AIR_COLOR = "#a8c8e8"
+_FLAT = dict(ambient=1.0, diffuse=0.0, specular=0.0)
+
+
+def _coloring(tree, color, idx=None, colorscale=None, cmin=None, cmax=None, group=None):
+    from ._colors import resolve
+
+    style = dict(STYLE)
+    style[AIR] = ("air", AIR_COLOR)
+    return resolve(tree, color, idx, colorscale or "Viridis", cmin, cmax, label_style=style, group=group)
+
+
+def _color_scale(fig, col):
+    """The colour bar of a numeric colouring, shared by every trace (coloraxis)."""
+    if col is not None and col.numeric:
+        fig.update_layout(coloraxis=dict(
+            colorscale=col.colorscale, cmin=col.cmin, cmax=col.cmax,
+            colorbar=dict(title=dict(text=col.name, font=dict(color=FG)), tickfont=dict(color=FG),
+                          len=0.6, x=0.97)))
+    return fig
+
+
+def _count(n, drawn=None):
+    text = f"{n:,} cell" + ("" if n == 1 else "s")
+    return text + (f", {drawn:,} drawn" if drawn is not None and drawn < n else "")
+
+
+def _key(name, color):
+    """A legend entry only: a coloured square."""
+    import plotly.graph_objects as go
+
+    return go.Scatter3d(x=[None], y=[None], z=[None], mode="markers", name=name, hoverinfo="skip",
+                        marker=dict(color=color, size=8, symbol="square"))
+
+
+def _category_keys(col, full, drawn=None):
+    """Legend entries for the categories among leaves `full`, with counts."""
+    from ._colors import LEGEND_MAX
+
+    counts = col.counts(full)
+    dc = counts if drawn is None else col.counts(drawn)
+    present = np.nonzero(counts)[0]
+    if present.size > LEGEND_MAX:
+        return [_hidden_note(f"{present.size:,} different {col.name} values (colours repeat)")]
+    return [_key(f"{col.names[k]} ({_count(int(counts[k]), int(dc[k]))})", col.colors[k]) for k in present]
+
+
+def _missing_key(col, full, drawn, nan):
+    from ._colors import MISSING
+
+    n = int(col.missing[full].sum())
+    if not n:
+        return []
+    if nan == "hide":
+        return [_hidden_note(f"no value: {n:,} cells hidden")]
+    return [_key(f"no value ({_count(n, int(col.missing[drawn].sum()))})", MISSING)]
+
+
+def _wire_by_value(tree, full, drawn, col, nan):
+    """Wire cubes of the leaves `drawn` (all of `full`, or thinned from it),
+    coloured by col. Numbers: one trace per cell size on the colour scale;
+    categories: one trace per category, with counts in the legend."""
+    from ._colors import LEGEND_MAX, MISSING
+
+    traces = []
+    val = drawn[~col.missing[drawn]]
+    if col.numeric:
+        levels = sorted(np.unique(tree.level[val]))
+        for k, L in enumerate(levels):
+            m = val[tree.level[val] == L]
+            n_all = int(((tree.level[full] == L) & ~col.missing[full]).sum())
+            name = f"{(1 << int(L)) * tree.voxel_size:g} m cells" + (f" ({m.size:,} of {n_all:,} drawn)" if m.size < n_all else "")
+            traces.append(_edge_trace(_cube_segments(tree, m), name, width=2.0 if k == 0 else 1.4,
+                                      values=np.repeat(col.values[m], 12)))
+    else:
+        counts, dc = col.counts(full), col.counts(drawn)
+        present = np.nonzero(counts)[0]
+        many = present.size > LEGEND_MAX
+        bins = {}
+        for k in present:                              # many categories: one trace per colour
+            bins.setdefault(col.colors[k] if many else k, []).append(k)
+        codes = col.codes[val]
+        for key, ks in bins.items():
+            m = val[np.isin(codes, ks)]
+            name = str(key) if many else f"{col.names[key]} ({_count(int(counts[key]), int(dc[key]))})"
+            traces.append(_edge_trace(_cube_segments(tree, m), name, color=col.colors[ks[0]], width=2.0,
+                                      legend=not many))
+        if many:
+            traces.append(_hidden_note(f"{present.size:,} different {col.name} values (colours repeat)"))
+    miss = drawn[col.missing[drawn]]
+    if nan == "grey" and miss.size:
+        traces.append(_edge_trace(_cube_segments(tree, miss), "no value", color=_rgba(MISSING, 0.55),
+                                  width=1.0, legend=False))
+    return traces + _missing_key(col, full, drawn, nan)
+
+
+def _quad_mesh(q, name, legend=True, share=False, **kw):
+    """Quads (n, 4, 3) in metres as one flat Mesh3d (two triangles each: the
+    first n triangles are (0, 1, 2) of each quad, the next n (0, 2, 3)).
+    share: neighbouring quads share their corners (a smaller figure; not
+    with per-corner text)."""
+    import plotly.graph_objects as go
+
+    n = len(q)
+    v = np.asarray(q, np.float32).reshape(-1, 3)
+    quad = np.arange(4 * n, dtype=np.int32).reshape(n, 4)
+    if share and n:
+        v, inv = np.unique(np.round(v, 3), axis=0, return_inverse=True)
+        quad = inv.reshape(n, 4).astype(np.int32)
+    kw.setdefault("lighting", _FLAT)
+    return go.Mesh3d(x=v[:, 0], y=v[:, 1], z=v[:, 2], i=np.concatenate([quad[:, 0], quad[:, 0]]),
+                     j=np.concatenate([quad[:, 1], quad[:, 2]]), k=np.concatenate([quad[:, 2], quad[:, 3]]),
+                     name=name, showlegend=legend, flatshading=True, **kw)
+
+
+def _faces_by_value(q, cell, col, nan, name, opacity=1.0, lighting=_FLAT, legend=False, hover=True):
+    """Quads q of leaves `cell` coloured by col, one colour per face; faces
+    without a value grey or left out. hover: show the value under the mouse
+    (text per corner: a bigger figure); else corners are shared."""
+    from ._colors import MISSING
+
+    miss = col.missing[cell]
+    ok = ~miss
+    out = []
+    common = dict(opacity=opacity, lighting=lighting, legendgroup=name)
+    if ok.any():
+        if col.numeric:
+            v = col.values[cell[ok]]
+            paint = dict(intensity=np.concatenate([v, v]).astype(np.float32), intensitymode="cell",
+                         coloraxis="coloraxis")
+            text = np.char.mod("%.4g", v) if hover else None
+        else:
+            fc = col.hex(cell[ok])
+            paint = dict(facecolor=np.concatenate([fc, fc]))
+            text = np.array(col.names, dtype=object)[col.codes[cell[ok]]] if hover else None
+        if hover:
+            paint.update(text=np.repeat(text, 4), hovertemplate=f"{col.name}: %{{text}}<extra></extra>")
+        else:
+            paint.update(hoverinfo="name")
+        out.append(_quad_mesh(q[ok], name, legend=legend, share=not hover, **paint, **common))
+    if nan == "grey" and miss.any():
+        out.append(_quad_mesh(q[miss], name, legend=legend and not ok.any(), share=True, color=MISSING,
+                              hovertemplate=f"{col.name}: no value<extra></extra>", **common))
+    return out
+
+
+def _plane_quads(tree, ix, axis, at, gap=0.0):
+    """Squares (n, 4, 3) where leaves ix cross the vertical plane x = at or
+    y = at (metres, show_octree frame), each inset by `gap` (number or one
+    per leaf) so the cell edges show."""
+    c = tree.voxel_size
+    X, Y, Z = tree.corners()
+    S = tree.sizes()
+    u = (Y if axis == "x" else X)[ix] * c
+    z = Z[ix] * c + tree.origin[2]
+    s = S[ix] * c
+    u, z, s = u + gap, z + gap, s - 2 * np.asarray(gap)
+    a = np.stack([u, u + s, u + s, u], 1)
+    b = np.stack([z, z, z + s, z + s], 1)
+    f = np.full_like(a, at)
+    return np.stack([f, a, b], -1) if axis == "x" else np.stack([a, f, b], -1)
+
+
+def _cut_by_value(tree, q, ix, col, nan):
+    """Cut faces coloured by value. Solids without a value keep their own
+    colour (buildings stay buildings); air without a value is grey or hidden."""
+    by_label = (tree.label[ix] != AIR) & col.missing[ix]
+    v = ~by_label
+    traces = _faces_by_value(q[v], ix[v], col, nan, "cut faces")
+    for L in np.unique(tree.label[ix[by_label]]):
+        m = by_label & (tree.label[ix] == L)
+        name, color = STYLE.get(int(L), (f"label {L}", "#cc4444"))
+        traces.append(_quad_mesh(q[m], name, color=color, hoverinfo="name", legendgroup=name))
+    drawn = ix[v] if nan == "grey" else ix[v & ~col.missing[ix]]
+    keys = [] if col.numeric else _category_keys(col, ix[v])
+    return traces + keys + _missing_key(col, ix[v & (tree.label[ix] == AIR)], drawn, nan)
+
+
+SIZE_COLORS =["#f2a65a", "#e9cf6e", "#a6cf8a", "#5fb8a8", "#4f8fc4", "#6b6fc9", "#9b6bc9"]
 
 
 def _level_grid(tree):
@@ -372,7 +598,7 @@ def _context(tree, labels, opacity):
 
 
 def show_selection(tree, cells, title=None, height=700, max_cells=15_000, context=(BUILDING, TREE),
-                   context_opacity=0.25):
+                   context_opacity=0.25, color=None, colorscale=None, cmin=None, cmax=None, nan="grey"):
     """Any selection of leaves drawn as wire cubes at their real size, in the
     frame of show_octree, with the tree's buildings and trees drawn lightly
     around for context.
@@ -381,6 +607,11 @@ def show_selection(tree, cells, title=None, height=700, max_cells=15_000, contex
         siblings ..., a bool mask over the leaves, or leaf indices): cubes
         coloured by cell size, as in show_octree(style="wire");
         or {name: selection}: one colour per name, with a legend.
+    color: colour one selection by a value (see show_octree): a tree.cells
+        column, a built-in column, a value of the group ("steps",
+        "distance"), or an array with one value per leaf or per selected
+        cell (in leaf order, as g.idx). The colour scale spans the
+        selection's values unless cmin / cmax are given.
     max_cells: at most this many cubes (15,000: a figure of about 9 MB), so
         the view stays responsive. Past it every size is still drawn: the most numerous sizes are thinned
         evenly (every k-th cell in Morton order, spread over the whole
@@ -389,49 +620,67 @@ def show_selection(tree, cells, title=None, height=700, max_cells=15_000, contex
     """
     import plotly.graph_objects as go
 
+    from ._colors import check_nan
+
+    nan = check_nan(nan)
     named = isinstance(cells, dict)
+    if named and color is not None:
+        raise ValueError("color= colours one selection by a value; with {name: group} each group has its "
+                         "own colour. Join the groups first (g1 | g2) to colour them by a value.")
     groups = cells if named else {"cells": cells}
     idx = {k: _leaf_index(tree, v) for k, v in groups.items()}
     every = np.unique(np.concatenate([v for v in idx.values()] or [np.zeros(0, np.int64)]))
     keep, thinned = _thin_evenly(tree, every, max_cells)
     traces = []
-    if named:
+    col = None
+    if color is not None:
+        group = cells if hasattr(cells, "values") and hasattr(cells, "idx") else None
+        col = _coloring(tree, color, every, colorscale, cmin, cmax, group=group)
+        pool = every if nan == "grey" else every[~col.missing[every]]     # the cells that can be drawn
+        keep, _ = _thin_evenly(tree, pool, max_cells)
+        traces = _wire_by_value(tree, every, keep, col, nan)
+        if keep.size < pool.size:
+            traces.append(_hidden_note(f"{keep.size:,} of {pool.size:,} cells drawn (evenly spread)"))
+        thinned = []
+    elif named:
         for k, (name, ix) in enumerate(idx.items()):
             shown = np.intersect1d(ix, keep)
-            color = GROUP_COLORS[k % len(GROUP_COLORS)]
+            gc = GROUP_COLORS[k % len(GROUP_COLORS)]
             label = f"{name} ({ix.size:,} cells" + (f", {shown.size:,} drawn)" if shown.size < ix.size else ")")
-            traces.append(_edge_trace(_cube_segments(tree, shown), label, color=_rgba(color, 0.9), width=2.0))
+            traces.append(_edge_trace(_cube_segments(tree, shown), label, color=_rgba(gc, 0.9), width=2.0))
             traces[-1].legendgroup = name
+        for size, drawn, n in thinned:
+            traces.append(_hidden_note(f"{size:g} m cells: {drawn:,} of {n:,} drawn (evenly spread)"))
     else:
+        # one legend entry per size; a thinned size says so in its own entry (no second "1 m cells")
+        notes = {f"{size:g}": (drawn, n) for size, drawn, n in thinned}
         levels = sorted(np.unique(tree.level[keep]))
         for k, L in enumerate(levels):
             m = keep[tree.level[keep] == L]
+            size = f"{(1 << int(L)) * tree.voxel_size:g}"
+            name = f"{size} m cells" + (" ({:,} of {:,} drawn, evenly spread)".format(*notes[size]) if size in notes else "")
             alpha = 0.95 - 0.6 * k / max(1, len(levels) - 1)       # small cells stand out
-            traces.append(_edge_trace(_cube_segments(tree, m), f"{(1 << int(L)) * tree.voxel_size:g} m cells",
+            traces.append(_edge_trace(_cube_segments(tree, m), name,
                                       color=_rgba(SIZE_COLORS[int(L) % len(SIZE_COLORS)], alpha),
                                       width=2.0 if k == 0 else 1.4))
-    for size, drawn, n in thinned:
-        traces.append(_hidden_note(f"{size:g} m cells: {drawn:,} of {n:,} drawn (evenly spread)"))
     traces = _context(tree, context, context_opacity) + traces
     fig = go.Figure(traces)
+    default = f"{every.size:,} selected cells" if every.size else "No cells selected"
+    if col is not None and every.size:
+        default += f", coloured by {col.name}"
     fig = _layout(fig, Occupancy(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
-                                  np.zeros(0, np.uint8), tree.voxel_size, tree.origin),
-                  title or (f"{every.size:,} selected cells" if every.size else "No cells selected"), height)
+                                  np.zeros(0, np.uint8), tree.voxel_size, tree.origin), title or default, height)
     fig.update_layout(scene_camera=dict(eye=dict(x=-1.45, y=-1.65, z=0.75)))
-    return fig
+    return _color_scale(fig, col)
 
 
-def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cells=None, cells=None):
+def show_octree(tree, style=None, title=None, height=700, cut=None, max_cells=None, cells=None,
+                color=None, colorscale=None, cmin=None, cmax=None, nan="grey", max_faces=200_000):
     """3D view of an adaptive octree.
 
-    cells: draw only a selection, as wire cubes (see show_selection): a
-        Group, a mask or leaf indices (coloured by size), or {name: group}
-        (one colour per name). The style is then "wire", and max_cells
-        thins the selection evenly instead of hiding the smallest sizes.
-
-    style="shells": nested see-through envelopes; shell k holds every air
-        cell up to 2**k cells wide, so you see where the mesh is fine in 3D.
-        Click legend entries to peel shells away.
+    style="shells" (the default): nested see-through envelopes; shell k
+        holds every air cell up to 2**k cells wide, so you see where the
+        mesh is fine in 3D. Click legend entries to peel shells away.
     style="cutaway": the octree as a block with one corner removed; the two
         cut faces show the cells (coloured by size), buildings stand in the
         rest. cut=(x, y) in metres sets the corner (default: block centre).
@@ -439,14 +688,55 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
         around solid buildings. If there are more than max_cells (40,000) air cells,
         the smallest sizes are hidden (and listed in the legend) so the view
         stays responsive; crop a smaller block to see every cell.
+
+    cells: draw only a selection, as wire cubes (see show_selection): a
+        Group, a mask or leaf indices (coloured by size), or {name: group}
+        (one colour per name). The style is then "wire" (another style
+        gives a warning), and max_cells thins the selection evenly instead
+        of hiding the smallest sizes.
+
+    color: colour the cells by a value instead of by size, in every style:
+        a tree.cells column name, a built-in column ("size_m", "z",
+        "level", "label", "class", ...) or an array with one value per leaf.
+        wire: the air cubes; cutaway: every cell on the cut faces (solids
+        without a value keep their own colour); shells: each shell's outer
+        faces, by the cell inside them. Buildings stand around as usual.
+        - Numbers: a colour scale with a colour bar (colorscale="Viridis",
+          or any plotly scale; cmin / cmax, default: the range over the
+          whole tree, so thinning or the cut never changes the colours).
+        - Categories (text, bools, label / class, object ids in
+          tree.id_columns or named "id" / "..._id", integers with at most
+          12 different values): one distinct colour each, with a legend;
+          ids stay exact integers. Use .astype(str) or .astype(float) on an
+          array to choose the other way.
+        - nan="grey" draws cells without a value (NaN, None, id -1) in grey;
+          nan="hide" leaves them out. The legend counts them.
+        With color=, a wire view past max_cells (15,000: about 9 MB) is
+        thinned evenly (every size kept, every k-th cell) and the legend
+        says how many are drawn. Shells by value draw one face per cell, so
+        they are several times bigger than plain shells; past
+        max_faces (200,000) they stop with a message: crop a smaller block.
     """
     import plotly.graph_objects as go
 
     from .exports import surface_quads
 
     if cells is not None:
+        if style not in (None, "wire"):
+            import warnings
+
+            warnings.warn(f"style={style!r} is not used with cells=: a selection is drawn as wire cubes "
+                          "(show_selection). Leave out cells= for a cutaway or shells of the whole tree.",
+                          UserWarning, stacklevel=2)
         return show_selection(tree, cells, title=title, height=height,
-                              max_cells=15_000 if max_cells is None else max_cells)
+                              max_cells=15_000 if max_cells is None else max_cells,
+                              color=color, colorscale=colorscale, cmin=cmin, cmax=cmax, nan=nan)
+    style = "shells" if style is None else style
+    if style not in ("shells", "cutaway", "wire"):
+        raise ValueError(f"style={style!r}: use 'shells', 'cutaway' or 'wire'")
+    if color is not None:
+        return _octree_by_value(tree, style, title, height, cut, 15_000 if max_cells is None else max_cells,
+                                color, colorscale, cmin, cmax, nan, max_faces)
     max_cells = 40_000 if max_cells is None else max_cells
     c = tree.voxel_size
     lev, lab = _level_grid(tree)
@@ -551,6 +841,119 @@ def show_octree(tree, style="shells", title=None, height=700, cut=None, max_cell
     if style == "wire":
         fig.update_layout(scene_camera=dict(eye=dict(x=-1.45, y=-1.65, z=0.75)))
     return fig
+
+
+def _octree_by_value(tree, style, title, height, cut, max_cells, color, colorscale, cmin, cmax, nan, max_faces):
+    import plotly.graph_objects as go
+
+    from ._colors import check_nan
+
+    nan = check_nan(nan)
+    c = tree.voxel_size
+    col = _coloring(tree, color, None, colorscale, cmin, cmax)
+    lev, lab = _level_grid(tree)
+    keep_lab = lab
+    if style == "wire":
+        air = np.nonzero(tree.label == AIR)[0]
+        pool = air if nan == "grey" else air[~col.missing[air]]          # the cells that can be drawn
+        drawn, _ = _thin_evenly(tree, pool, max_cells)
+        traces = _wire_by_value(tree, air, drawn, col, nan)
+        if drawn.size < pool.size:
+            traces.append(_hidden_note(f"{drawn.size:,} of {pool.size:,} air cells drawn (evenly spread)"))
+        default_title = f"{col.name} on the air cells (wire cubes)"
+        camera = dict(eye=dict(x=-1.45, y=-1.65, z=0.75))
+    elif style == "shells":
+        shell_opac = [0.65, 0.32, 0.18, 0.1, 0.07]
+        levels = [int(v) for v in np.unique(lev[lab == AIR])]
+        traces, seen = [], []
+        shells = [_shell_quads(tree, lev, lab, L) for L in levels[:-1]]
+        n_faces = sum(len(q) for q, _ in shells)
+        if n_faces > max_faces:
+            raise ValueError(f"{n_faces:,} shell faces: crop a smaller block (city.crop) or raise max_faces, "
+                             "or use style='cutaway' or 'wire'")
+        for k, (L, (q, cell)) in enumerate(zip(levels[:-1], shells)):
+            if len(q) == 0:
+                continue
+            seen.append(cell)
+            traces += _faces_by_value(q, cell, col, nan, f"cells up to {(1 << L) * c:g} m",
+                                      opacity=shell_opac[k % 5], legend=True, hover=False,
+                                      lighting=dict(ambient=0.6, diffuse=0.6, specular=0.05))
+        seen = np.unique(np.concatenate(seen)) if seen else np.zeros(0, np.int64)
+        drawn = seen if nan == "grey" else seen[~col.missing[seen]]
+        traces += ([] if col.numeric else _category_keys(col, seen)) + _missing_key(col, seen, drawn, nan)
+        default_title = f"{col.name} on the shells of cells by size"
+        camera = None
+    else:
+        nx, ny, nz = tree.shape
+        cx, cy = (nx // 2, ny // 2) if cut is None else (int(cut[0] / c), int(cut[1] / c))
+        X, Y, Z = tree.corners()
+        S = tree.sizes()
+        # the removed corner is x < cx, y < cy; its walls are the cut faces
+        i1 = np.nonzero((X <= cx) & (cx < X + S) & (Y < cy))[0]
+        i2 = np.nonzero((Y <= cy) & (cy < Y + S) & (X < cx))[0]
+        gap = lambda ix: np.where(tree.label[ix] == AIR, 0.08 * c, 0.0)      # noqa: E731
+        q = np.concatenate([_plane_quads(tree, i1, "x", cx * c - 0.15 * c, gap(i1)),
+                            _plane_quads(tree, i2, "y", cy * c - 0.15 * c, gap(i2))])
+        traces = _cut_by_value(tree, q, np.concatenate([i1, i2]), col, nan)
+        keep_lab = lab.copy()
+        keep_lab[:cx, :cy] = AIR
+        default_title = f"{col.name} on two cut faces"
+        camera = dict(eye=dict(x=-1.1, y=-1.1, z=0.7))
+    cols = Occupancy.from_dense(keep_lab, c, (0.0, 0.0, tree.origin[2]))
+    traces = _meshes(cols, [BUILDING, TREE]) + traces
+    seen_names = set()
+    for t in traces:                                   # one legend entry per name
+        if t.showlegend is not False and t.name in seen_names:
+            t.showlegend = False
+        seen_names.add(t.name)
+    fig = go.Figure(traces)
+    fig = _layout(fig, Occupancy(tree.shape, np.zeros(1, np.int64), np.zeros(0, np.uint16),
+                                  np.zeros(0, np.uint8), c, tree.origin), title or default_title, height)
+    if camera:
+        fig.update_layout(scene_camera=camera)
+    return _color_scale(fig, col)
+
+
+def _shell_quads(tree, lev, lab, L):
+    """Outer faces of the shell 'solids and air cells up to level L': the
+    faces of those air leaves that touch a bigger air leaf or the side of
+    the box (not the floor). A bigger neighbour covers the whole face, so
+    each face is one square of its leaf. Returns quads (n, 4, 3) in the
+    show_octree frame and the leaf of each."""
+    c = tree.voxel_size
+    X, Y, Z = tree.corners()
+    S = tree.sizes()
+    ix = np.nonzero((tree.label == AIR) & (tree.level <= L))[0]
+    P = np.stack([X[ix], Y[ix], Z[ix]], 1)
+    s = S[ix]
+    quads, cells = [], []
+    for axis in range(3):
+        u, w = [a for a in range(3) if a != axis]
+        for sign in (-1, 1):
+            nb = P.copy()
+            nb[:, axis] += s if sign > 0 else -1
+            inside = (nb[:, axis] >= 0) & (nb[:, axis] < tree.shape[axis])
+            face = ~inside if not (axis == 2 and sign < 0) else np.zeros(len(P), bool)
+            n = nb[inside]
+            face[inside] = (lab[n[:, 0], n[:, 1], n[:, 2]] == AIR) & (lev[n[:, 0], n[:, 1], n[:, 2]] > L)
+            f = np.nonzero(face)[0]
+            if not f.size:
+                continue
+            lo = P[f].astype(np.float64)
+            if sign > 0:
+                lo[:, axis] += s[f]
+            corners = []
+            for du, dw in ((0, 0), (1, 0), (1, 1), (0, 1)):
+                q = lo.copy()
+                q[:, u] += du * s[f]
+                q[:, w] += dw * s[f]
+                corners.append(q)
+            quads.append(np.stack(corners, 1))
+            cells.append(ix[f])
+    if not quads:
+        return np.zeros((0, 4, 3)), np.zeros(0, np.int64)
+    q = np.concatenate(quads) * c + np.array([0.0, 0.0, tree.origin[2]])
+    return q, np.concatenate(cells)
 
 
 def setup_notebook(fallback=None):

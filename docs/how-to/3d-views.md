@@ -58,6 +58,71 @@ legend says how many are drawn, so big selections stay quick and keep their
 shape; select a smaller area to see every cell. `context=()` leaves out the
 buildings around.
 
+## Data on cells: colour any cell by a value
+
+Any value stored per cell in `tree.cells` can be seen in every view with
+`color=`: in the air (wire cubes), on cut faces (cutaway, sections), on the
+shells, or on any selection, such as the cells along the building facades.
+
+```python
+import numpy as np
+from datetime import date
+from octreecity import fill
+from octreecity.analysis import sun_hours
+from octreecity.render import plot_slice
+from octreecity.viz import show_cells, show_octree
+
+block = city.crop(0, 0, 256, 256)
+tree = block.to_octree(4)
+
+tree.cells["height"] = fill.from_function(tree, lambda x, y, z: z)   # any value per cell
+air = tree.label == 0
+hours = np.full(tree.n_leaves, np.nan)                   # no value inside solids
+hours[air] = sun_hours(block, tree.centers()[air], 36.37, 127.3625,
+                       date(2026, 12, 21), 9, mode="exact")
+tree.cells["sun_hours"] = hours                          # winter sun per air cell
+
+show_octree(tree, style="wire", color="sun_hours")       # in the air
+show_octree(tree, style="cutaway", color="sun_hours")    # on two cut faces
+show_octree(tree, style="shells", color="sun_hours")     # on the shells by cell size
+show_cells(tree, color="sun_hours")                      # one vertical cut, 3D
+
+facade = tree.select(where=lambda c: c["label"] == 2).neighbours(steps=1)
+facade.show(color="sun_hours", nan="hide")               # the air along the walls
+
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots(figsize=(10, 3))
+plot_slice(tree, ax, axis="y", color="sun_hours")        # a section as an image
+```
+
+`color=` takes a `tree.cells` column name, a built-in column (`"size_m"`,
+`"z"`, `"level"`, `"class"`, `"label"` ...), a value of a group (`"steps"`,
+`"distance"`), or an array with one value per cell.
+
+- **Numbers** get a colour scale and a colour bar: `colorscale="Viridis"`
+  (any plotly scale; in `plot_slice` also any matplotlib name), `cmin=`,
+  `cmax=`. By default the scale spans the values of the whole tree (of the
+  selection for `g.show`), so a cut, a crop of the view or thinning never
+  changes the colours.
+- **Categories** get one distinct colour each and a legend, never a
+  gradient: text, `True`/`False`, `class` and `label`, object ids (columns in
+  `tree.id_columns`, `"id"` or `"..._id"`) and integers with at most 12
+  different values. Ids stay exact integers (-1 is "no value", -2 "mixed").
+  To choose the other way, pass `tree.cells["zone"].astype(str)` or
+  `.astype(float)`.
+- **Cells without a value** (NaN, None, id -1) are grey (`nan="grey"`) or
+  left out (`nan="hide"`); the legend counts them. On cut faces and
+  sections, buildings and ground without a value keep their own colour.
+
+What each style colours: `wire` the air cells (use `cells=` or `g.show` for
+others); `cutaway`, `show_cells` and `plot_slice` every cell on the cut;
+`shells` the outer faces of each shell, by the cell inside. Past
+`max_cells` (15,000 cubes, a figure of about 9 MB) wire views are thinned
+evenly, every size kept, and the legend says how many cells are drawn.
+Shells by value draw one face per cell, several times bigger than plain
+shells: a block of about 250 m is fine (about 10 MB); bigger ones stop with
+a message to crop.
+
 Big areas are simplified for display only (`step`, chosen automatically to
 keep views quick); the data is not changed. Save a view as a web page with
 `fig.write_html("city.html")`.

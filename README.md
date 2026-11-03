@@ -58,6 +58,13 @@ building footprints, terrain rasters, land cover and trees.
 </p>
 <p align="center"><em>Adaptive cells following a 3D field: hours of winter sun in the air above downtown Osaka. Cells refine along the edges of shadow volumes and stay large in uniform sun or shade.</em></p>
 
+## Gallery
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/interlace_sun.png" width="80%" alt="The Interlace, Singapore, built from OpenStreetMap: cells next to the buildings coloured by hours of sun, with ground, roads and greenery around">
+</p>
+<p align="center"><em>The Interlace, Singapore, from OpenStreetMap in a few lines: the cells next to every wall and roof coloured by hours of sun (bright = more sun), with roads, paths and greenery around.</em></p>
+
 ## Install
 
 ```bash

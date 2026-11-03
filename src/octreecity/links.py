@@ -111,7 +111,7 @@ def face_pairs(tree, mask=None):
     return _probe(tree, FACES, mask)
 
 
-def _probe(tree, dirs, mask=None):
+def _probe(tree, dirs, mask=None, bar=None):
     x, y, z = tree.corners()
     s = tree.sizes()
     idx = np.arange(tree.n_leaves) if mask is None else np.nonzero(mask)[0]
@@ -124,6 +124,8 @@ def _probe(tree, dirs, mask=None):
               & (py < tree.shape[1]) & (pz < tree.shape[2]))
         A.append(idx[ok])
         B.append(tree.locate(px[ok], py[ok], pz[ok]))
+        if bar is not None:
+            bar.update()
     return np.concatenate(A), np.concatenate(B)
 
 
@@ -133,27 +135,38 @@ def directions(connectivity):
     return [v for v in d if sum(map(abs, v)) <= nz]
 
 
-def neighbours(tree, connectivity=6, mask=None, kind="face"):
+def neighbours(tree, connectivity=6, mask=None, kind="face", quiet=None):
     """Links between leaves that touch: by a face (6), also an edge (18), or
     also a corner (26). Both directions, each pair once per direction. With
-    mask, only links between leaves in mask (e.g. one horizontal layer)."""
-    a, b = _probe(tree, directions(connectivity))
-    pairs = np.unique(np.concatenate([np.stack([a, b], 1), np.stack([b, a], 1)]), axis=0)
+    mask, only links between leaves in mask (e.g. one horizontal layer).
+    Shows a bar on big trees (quiet=True: never)."""
+    from . import progress
+
+    dirs = directions(connectivity)
+    with progress.bar(len(dirs) + 1, "links: neighbours", "steps", quiet) as bar:
+        a, b = _probe(tree, dirs, bar=bar)
+        pairs = np.unique(np.concatenate([np.stack([a, b], 1), np.stack([b, a], 1)]), axis=0)
+        bar.update()
     if mask is not None:
         m = np.asarray(mask, bool)
         pairs = pairs[m[pairs[:, 0]] & m[pairs[:, 1]]]
     return Links(pairs[:, 0], pairs[:, 1], kind)
 
 
-def within(tree, radius_m, mask=None, kind="near", max_links=None):
+def within(tree, radius_m, mask=None, kind="near", max_links=None, quiet=None):
     """Links between leaves (in mask) whose centres are at most radius_m
     apart, with the distance as value 'distance'. max_links keeps the
-    nearest ones per leaf."""
+    nearest ones per leaf. On big trees this is one long search: the time
+    so far is shown (quiet=True: nothing)."""
     from scipy.spatial import cKDTree
+
+    from . import progress
 
     idx = np.arange(tree.n_leaves) if mask is None else np.nonzero(mask)[0]
     c = tree.centers()[idx]
-    pairs = cKDTree(c).query_pairs(radius_m, output_type="ndarray")
+    with progress.wait(f"links: pairs of {idx.size:,} cells within {radius_m:g} m", quiet,
+                       done=f"links: pairs within {radius_m:g} m found"):
+        pairs = cKDTree(c).query_pairs(radius_m, output_type="ndarray")
     pairs = np.concatenate([pairs, pairs[:, ::-1]])
     d = np.linalg.norm(c[pairs[:, 0]] - c[pairs[:, 1]], axis=1)
     if max_links is not None and len(pairs):
@@ -197,7 +210,7 @@ def hierarchy(tree, parents, ancestors=True, children=True, up_between_parents=T
     return res
 
 
-def across(tree, parents, connectivity=6, leaves=True, nodes=True, kind="across"):
+def across(tree, parents, connectivity=6, leaves=True, nodes=True, kind="across", quiet=None):
     """For each cell (leaves and/or parent cells), a link to the cell of the
     same size across each face (edge, corner): the parent cell there if
     that space is split further, else the leaf that covers it (same size or
@@ -209,21 +222,24 @@ def across(tree, parents, connectivity=6, leaves=True, nodes=True, kind="across"
     if nodes:
         src.append(n + np.arange(len(parents))), codes.append(parents.code), levels.append(parents.level)
     src, code, level = np.concatenate(src), np.concatenate(codes), np.concatenate(levels).astype(np.int64)
-    from . import morton
+    from . import morton, progress
 
     x, y, z = morton.decode(code)
     s = np.left_shift(1, level)
     A, B = [], []
-    for dx, dy, dz in directions(connectivity):
-        px, py, pz = x + dx * s, y + dy * s, z + dz * s
-        ok = ((px >= 0) & (py >= 0) & (pz >= 0) & (px < tree.shape[0])
-              & (py < tree.shape[1]) & (pz < tree.shape[2]))
-        hit = np.full(src.size, -1)
-        node = parents.find(morton.encode(px[ok], py[ok], pz[ok]), level[ok])
-        leaf = tree.locate(px[ok], py[ok], pz[ok])
-        same_node = node >= 0
-        h = np.where(same_node, n + node, np.where(tree.level[leaf] >= level[ok], leaf, -1))
-        hit[ok] = h
-        good = hit >= 0
-        A.append(src[good]), B.append(hit[good])
+    dirs = directions(connectivity)
+    with progress.bar(len(dirs), "links: across", "directions", quiet) as bar:
+        for dx, dy, dz in dirs:
+            px, py, pz = x + dx * s, y + dy * s, z + dz * s
+            ok = ((px >= 0) & (py >= 0) & (pz >= 0) & (px < tree.shape[0])
+                  & (py < tree.shape[1]) & (pz < tree.shape[2]))
+            hit = np.full(src.size, -1)
+            node = parents.find(morton.encode(px[ok], py[ok], pz[ok]), level[ok])
+            leaf = tree.locate(px[ok], py[ok], pz[ok])
+            same_node = node >= 0
+            h = np.where(same_node, n + node, np.where(tree.level[leaf] >= level[ok], leaf, -1))
+            hit[ok] = h
+            good = hit >= 0
+            A.append(src[good]), B.append(hit[good])
+            bar.update()
     return Links(np.concatenate(A), np.concatenate(B), kind)

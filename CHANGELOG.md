@@ -4,6 +4,20 @@
 
 ### New
 
+- Progress messages for slow steps, on one line that updates in place
+  (terminal and Jupyter; one line per step in log files):
+  - The OpenStreetMap download (`fetch_osm`, `city_from_osm`) shows the
+    time while the server thinks, the bytes received, busy servers and
+    retries, then a summary ("2,314 buildings, 812 roads and paths ... in
+    18.2 s (1.9 MB)").
+  - Bars for `CityBuilder.build`, `to_octree`, `links.neighbours` /
+    `across` (and the time for `links.within`), `sun_hours`,
+    `sky_view_factor`, `write_obj`, `write_vtk`, `Store.build`,
+    `build_tiled` and `read_citygml`. Only steps longer than one second
+    show anything.
+  - `quiet=True` on each of them, `octreecity.progress.quiet(True)`, or
+    `OCTREECITY_QUIET=1` switches it off. Messages go to stderr and to the
+    logger "octreecity". No new dependency.
 - Point data on cells: `fill.from_points(tree, df, x="lon", y="lat",
   crs="EPSG:4326")` puts sensors, POIs or survey points into the leaves
   that contain them and writes one value per leaf and column into

@@ -354,23 +354,29 @@ class Store:
             m["tiles"].pop(f"{i}_{j}", None)
         self._commit(change)
 
-    def build(self, func, tiles, workers=1, **kw):
+    def build(self, func, tiles, workers=1, quiet=None, **kw):
         """Build tiles with func(store, i, j, **kw) -> (occupancy, tree,
         objects) (tree and objects may be None), in `workers` processes
         (func must be a top-level function), writing each tile as it is
-        done. Returns the list of (i, j) written."""
+        done. Returns the list of (i, j) written. Shows a bar over the
+        tiles (quiet=True: never); the steps inside a tile stay silent."""
+        from . import progress
+
         self._need_write()
         tiles = [tuple(t) for t in tiles]
-        if workers <= 1:
-            for i, j in tiles:
-                _build_job(str(self.path), func, i, j, kw)
-        else:
-            from concurrent.futures import ProcessPoolExecutor
+        with progress.bar(len(tiles), f"store: {self.path.name}", "tiles", quiet) as bar:
+            if workers <= 1:
+                for i, j in tiles:
+                    _build_job(str(self.path), func, i, j, kw)
+                    bar.update()
+            else:
+                from concurrent.futures import ProcessPoolExecutor, as_completed
 
-            with ProcessPoolExecutor(workers) as ex:
-                futs = [ex.submit(_build_job, str(self.path), func, i, j, kw) for i, j in tiles]
-                for f in futs:
-                    f.result()
+                with ProcessPoolExecutor(workers, initializer=progress.worker_quiet) as ex:
+                    futs = [ex.submit(_build_job, str(self.path), func, i, j, kw) for i, j in tiles]
+                    for f in as_completed(futs):
+                        f.result()
+                        bar.update()
         self.reload()
         return tiles
 

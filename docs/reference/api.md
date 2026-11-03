@@ -16,6 +16,7 @@ Core (no domain words):
 | `octreecity.links` | `Links`, `neighbours`, `hierarchy`, `across`, `within`, `face_pairs` |
 | `octreecity.learn` | `tokens`, `Tokens` (`concat`, `to_torch`, `save`), `pixel_map`, `batches`, `reach_m` |
 | `octreecity.measure` | `growth`, `table`, `timed` |
+| `octreecity.progress` | progress lines for slow steps: `quiet`, `bar`, `wait`, `note`, `DELAY`; `quiet=True` on each slow function |
 | `octreecity.attention` | `LinkModel`, `LinkAttention`, `fit`, `predict` (needs `octreecity[torch]`) |
 
 City tools (use the `octreecity.urban` preset of class names):

@@ -35,16 +35,29 @@ from .octree import LinearOctree, _check_shape, _children
 from .rules import Boxes
 
 
-def build(source, rule, max_level, min_level=0, shares=False, stats=("mean",), label_depth=None):
+def build(source, rule, max_level, min_level=0, shares=False, stats=("mean",), label_depth=None,
+          quiet=None):
+    from . import progress
+
     S = 1 << int(max_level)
     shape = tuple(-(-int(n) // S) * S for n in source.shape)
     _check_shape(shape, max_level)
     r = [np.arange(n // S) for n in shape]
     ix, iy, iz = (g.ravel() for g in np.meshgrid(*r, indexing="ij"))
+    bar = progress.bar(int(max_level) - int(min_level) + 2, "octree", "levels", quiet)
+    with bar:
+        leaves = _levels(source, rule, max_level, min_level, ix, iy, iz, bar)
+        tree = _tree(source, shape, max_level, leaves, shares, stats, label_depth)
+        bar.update()
+    return tree
+
+
+def _levels(source, rule, max_level, min_level, ix, iy, iz, bar):
     leaves = []                                    # (x, y, z, level, summary) per level
     for lv in range(int(max_level), int(min_level) - 1, -1):
         if not ix.size:
-            break
+            bar.update()
+            continue
         s = 1 << lv
         x, y, z = ix * s, iy * s, iz * s
         summ = source.summarize(x, y, z, s)
@@ -55,7 +68,8 @@ def build(source, rule, max_level, min_level=0, shares=False, stats=("mean",), l
         keep = ~split
         leaves.append((x[keep], y[keep], z[keep], lv, summ.take(keep)))
         ix, iy, iz = _children(ix[split], iy[split], iz[split])
-    return _tree(source, shape, max_level, leaves, shares, stats, label_depth)
+        bar.update()
+    return leaves
 
 
 def _tree(source, shape, max_level, leaves, shares, stats, label_depth=None):

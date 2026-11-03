@@ -92,15 +92,20 @@ def _march(city, pts, az, alt, surf, max_dist, mode, zmax):
     return best if alt is None else blocked
 
 
-def sky_view_factor(city, pts, n_az=36, max_dist=300.0):
+def sky_view_factor(city, pts, n_az=36, max_dist=300.0, quiet=None):
     """SVF in [0, 1] per point from horizon angles over n_az azimuths
-    (surface mode): SVF = mean over azimuths of cos^2(horizon elevation)."""
+    (surface mode): SVF = mean over azimuths of cos^2(horizon elevation).
+    Shows a bar on long runs (quiet=True: never)."""
+    from . import progress
+
     surf = surface_height(city)
     zmax = surf.max()
     acc = np.zeros(len(pts))
-    for az in np.arange(n_az) * 360.0 / n_az:
-        t = _march(city, pts, az, None, surf, max_dist, "surface", zmax)
-        acc += 1.0 / (1.0 + t * t)          # cos^2(atan t)
+    with progress.bar(int(n_az), f"sky view: {len(pts):,} points", "directions", quiet) as bar:
+        for az in np.arange(n_az) * 360.0 / n_az:
+            t = _march(city, pts, az, None, surf, max_dist, "surface", zmax)
+            acc += 1.0 / (1.0 + t * t)          # cos^2(atan t)
+            bar.update()
     return acc / n_az
 
 
@@ -133,17 +138,23 @@ def sun_position(lat, lon, when):
     return az % 360, alt
 
 
-def sun_hours(city, pts, lat, lon, day, tz_hours, step_min=20, mode="surface", grid_rotation=0.0):
+def sun_hours(city, pts, lat, lon, day, tz_hours, step_min=20, mode="surface", grid_rotation=0.0,
+              quiet=None):
     """Hours of direct sun per point on `day` (a date), sampling every
     step_min minutes. grid_rotation: angle (deg) from grid +y to true north,
-    for projected grids whose axes are not aligned with north."""
+    for projected grids whose axes are not aligned with north. Shows a bar
+    on long runs (quiet=True: never)."""
+    from . import progress
+
     tz = timezone(timedelta(hours=tz_hours))
     start = datetime(day.year, day.month, day.day, tzinfo=tz)
     hours = np.zeros(len(pts))
-    for k in range(int(24 * 60 / step_min)):
-        az, alt = sun_position(lat, lon, start + timedelta(minutes=k * step_min))
-        if alt <= 0.5:
-            continue
-        lit = ~shadow(city, pts, az - grid_rotation, alt, mode=mode)
-        hours += lit * step_min / 60
+    steps = int(24 * 60 / step_min)
+    with progress.bar(steps, f"sun hours: {len(pts):,} points", "time steps", quiet) as bar:
+        for k in range(steps):
+            az, alt = sun_position(lat, lon, start + timedelta(minutes=k * step_min))
+            if alt > 0.5:
+                lit = ~shadow(city, pts, az - grid_rotation, alt, mode=mode)
+                hours += lit * step_min / 60
+            bar.update()
     return hours

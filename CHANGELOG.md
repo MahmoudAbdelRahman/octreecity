@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Point data on cells: `fill.from_points(tree, x, y, z, values, how=...,
+  crs=...)` puts sensors, POIs or survey points into the leaves that
+  contain them and gives one value per leaf: mean, sum, count, min, max,
+  std, or mode for categories and ids (exact int64, -1 where there is no
+  point). `crs="EPSG:4326"` takes lon, lat. `values` may be a dict of
+  columns; without values the points are counted. Points outside the box
+  are dropped with a warning that says how many. Ids (names in
+  `tree.id_columns`, or integers too big for float64) are never averaged.
+- `tree.cell_at(x, y, z, crs=None)`: the leaf of each point, given in
+  metres in the tree's frame (as `centers()`) or in any crs; -1 outside.
+- How-to: [your own point data on cells](docs/how-to/point-data.md).
+
+### Fixed
+
+- `tree.locate(i, j, k)` returns -1 for a voxel outside the box; before,
+  it silently returned a wrong leaf.
+
 ## 0.4.2
 
 ### Fixed

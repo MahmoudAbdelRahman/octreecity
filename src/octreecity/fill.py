@@ -8,12 +8,15 @@ the result can become a static column or one snapshot of a dynamic value:
     tree.add_snapshot("08:00", wind=from_raster(tree, wind_8))      # over time
     tree.cells["rain"] = from_function(tree, lambda x, y, z: ...)   # any f
     s = from_source(tree, other_source)                             # any Source
+    tree.cells["pm25"] = from_points(tree, lon, lat, 2.0, pm25, crs="EPSG:4326")  # points
 
 Values are summaries of the data inside each cell (mean by default; std,
 min, max, count on request; NaN data is skipped). Parent cells get theirs
 with tree.parents().reduce(column). carry() moves columns onto a changed
 tree over the same box (for snapshots taken on different trees).
 """
+
+import warnings
 
 import numpy as np
 from scipy import ndimage
@@ -117,6 +120,101 @@ def from_function(tree, func, samples=1):
             for d in u:
                 acc += func(c[:, 0] + a * half[:, 0], c[:, 1] + b * half[:, 0], c[:, 2] + d * half[:, 0])
     return acc / samples ** 3
+
+
+def from_points(tree, x, y, z, values=None, how=None, crs=None):
+    """One value per leaf from point data (sensors, POIs, survey points):
+    each point goes to the leaf that contains it (tree.cell_at).
+
+    x, y, z: metres in the tree's frame (as centers()), or x, y in `crs`
+    (crs="EPSG:4326": lon, lat) with z in metres; scalars and arrays mix.
+    values: one value per point; a dict {name: values} (returns a dict); or
+    None to count the points in each leaf.
+    how: mean, sum, count, min, max, std, or mode (the most common value,
+    for categories and ids; a tie goes to the smallest value). Default:
+    mode for text and ids, else mean. Ids are values named in
+    tree.id_columns or integers too big for float64; they are kept exact
+    and only mode or count may be used on them.
+
+    A leaf with no point gets NaN (count and sum: 0; mode: -1 for
+    integers, "" for text). NaN values are skipped. Points outside the box
+    are dropped, with a warning that says how many.
+    """
+    cell = np.atleast_1d(tree.cell_at(x, y, z, crs=crs))
+    out = cell < 0
+    if out.any():
+        warnings.warn(f"{int(out.sum()):,} of {cell.size:,} points are outside the tree box "
+                      "and were dropped", stacklevel=2)
+    if values is None:
+        if how not in (None, "count"):
+            raise ValueError(f"how={how!r} needs values; without values the points are counted")
+        return np.bincount(cell[~out], minlength=tree.n_leaves)
+    if isinstance(values, dict):
+        return {k: _from_points(tree, cell, v, how, k in tree.id_columns) for k, v in values.items()}
+    return _from_points(tree, cell, values, how, False)
+
+
+def _from_points(tree, cell, v, how, is_id):
+    v = np.asarray(v)
+    if v.shape != cell.shape:
+        raise ValueError(f"values have shape {v.shape}, expected one per point {cell.shape}")
+    numeric = v.dtype.kind in "fiub"
+    is_id = is_id or (v.dtype.kind in "iu" and v.size > 0
+                      and np.abs(v.astype(np.float64)).max() >= 2 ** 53)
+    how = how or ("mode" if is_id or not numeric else "mean")
+    if how not in ("mean", "sum", "count", "min", "max", "std", "mode"):
+        raise ValueError(f"unknown how={how!r}")
+    if how not in ("mode", "count") and (is_id or not numeric):
+        raise ValueError("these values are ids or text: they must not pass through float; "
+                         "use how='mode' (or 'count')")
+    keep = cell >= 0
+    if v.dtype.kind == "f":
+        keep &= np.isfinite(v)
+    c, v, n = cell[keep], v[keep], tree.n_leaves
+    cnt = np.bincount(c, minlength=n)
+    if how == "count":
+        return cnt
+    if how == "mode":
+        return _mode(c, v, n)
+    w = v.astype(np.float64)
+    if how == "sum":
+        return np.bincount(c, weights=w, minlength=n)
+    if how in ("min", "max"):
+        order = np.lexsort((w, c))
+        cs, ws = c[order], w[order]
+        new = np.r_[True, cs[1:] != cs[:-1]] if cs.size else np.zeros(0, bool)
+        pick = new if how == "min" else np.r_[new[1:], True][:cs.size]
+        res = np.full(n, np.nan)
+        res[cs[pick]] = ws[pick]
+        return res
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean = np.bincount(c, weights=w, minlength=n) / cnt
+        if how == "mean":
+            return mean
+        d = w - mean[c]                          # std: centred per leaf first
+        return np.sqrt(np.bincount(c, weights=d * d, minlength=n) / cnt)
+
+
+def _mode(c, v, n):
+    """Most common value per leaf, exact for any dtype (ties: smallest)."""
+    u, inv = np.unique(v, return_inverse=True)
+    inv = inv.ravel()
+    if v.dtype.kind in "iub":
+        res, u = np.full(n, -1, np.int64), u.astype(np.int64)
+    elif v.dtype.kind == "f":
+        res = np.full(n, np.nan)
+    elif v.dtype.kind in "US":
+        res = np.full(n, "", u.dtype)
+    else:
+        res = np.full(n, None, object)
+    if not c.size:
+        return res
+    (pc, pi), k = np.unique(np.stack([c, inv.astype(np.int64)]), axis=1, return_counts=True)
+    order = np.lexsort((pi, -k, pc))             # per leaf: most points first, then smallest value
+    pc, pi = pc[order], pi[order]
+    first = np.r_[True, pc[1:] != pc[:-1]]
+    res[pc[first]] = u[pi[first]]
+    return res
 
 
 def carry(old, new, columns=None):

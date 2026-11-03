@@ -200,9 +200,41 @@ class LinearOctree:
         return np.left_shift(1, self.level.astype(np.int64))
 
     def locate(self, x, y, z):
-        """Index of the leaf containing integer voxel (x, y, z)."""
-        key = morton.encode(x, y, z)
-        return np.searchsorted(self.code, key, side="right") - 1
+        """Index of the leaf containing integer voxel (x, y, z), counted from
+        the tree's corner; -1 for a voxel outside the box. For points in
+        metres or lon/lat use cell_at."""
+        x, y, z = (np.asarray(v) for v in (x, y, z))
+        inside = ((x >= 0) & (y >= 0) & (z >= 0)
+                  & (x < self.shape[0]) & (y < self.shape[1]) & (z < self.shape[2]))
+        key = morton.encode(*(np.where(inside, v, 0) for v in (x, y, z)))
+        return np.where(inside, np.searchsorted(self.code, key, side="right") - 1, -1)[()]
+
+    def cell_at(self, x, y, z, crs=None):
+        """Index of the leaf that contains each point; -1 for a point outside
+        the box (or with a NaN coordinate).
+
+        x, y, z: metres in the tree's frame, the same frame as centers()
+        (absolute: origin included, in tree.crs). With crs (e.g. "EPSG:4326")
+        x, y are given in that system instead (lon, lat for EPSG:4326) and
+        are converted to tree.crs; z stays metres in the tree's frame.
+        Scalars and arrays mix (e.g. one z for all points).
+        """
+        x, y, z = np.broadcast_arrays(*(np.asarray(v, np.float64) for v in (x, y, z)))
+        if crs is not None:
+            if self.crs is None:
+                raise ValueError("the tree has no crs (tree.crs is None): give x, y in the tree's metres")
+            from pyproj import CRS, Transformer
+
+            if not CRS.from_user_input(crs).equals(CRS.from_user_input(self.crs)):
+                x, y = Transformer.from_crs(crs, self.crs, always_xy=True).transform(x, y)
+                x, y = np.asarray(x, np.float64), np.asarray(y, np.float64)
+        h = float(self.voxel_size)
+        f = [(v - o) / h for v, o in zip((x, y, z), self.origin)]
+        inside = np.ones(x.shape, bool)
+        for v, n in zip(f, self.shape):
+            inside &= np.isfinite(v) & (v >= 0) & (v < n)
+        i, j, k = (np.floor(np.where(inside, v, 0)).astype(np.int64) for v in f)
+        return np.where(inside, self.locate(i, j, k), -1)[()]
 
     def label_at(self, x, y, z):
         return self.label[self.locate(x, y, z)]

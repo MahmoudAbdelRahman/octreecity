@@ -209,7 +209,7 @@ class LinearOctree:
         key = morton.encode(*(np.where(inside, v, 0) for v in (x, y, z)))
         return np.where(inside, np.searchsorted(self.code, key, side="right") - 1, -1)[()]
 
-    def cell_at(self, x, y, z, crs=None):
+    def cell_at(self, x, y, z=None, crs=None, height=1.5):
         """Index of the leaf that contains each point; -1 for a point outside
         the box (or with a NaN coordinate).
 
@@ -217,9 +217,12 @@ class LinearOctree:
         (absolute: origin included, in tree.crs). With crs (e.g. "EPSG:4326")
         x, y are given in that system instead (lon, lat for EPSG:4326) and
         are converted to tree.crs; z stays metres in the tree's frame.
-        Scalars and arrays mix (e.g. one z for all points).
+        z=None: `height` metres above the ground under each point (street
+        level; the ground is the "ground" class and its parts, stacked from
+        the bottom of the box). Scalars and arrays mix (e.g. one z for all).
         """
-        x, y, z = np.broadcast_arrays(*(np.asarray(v, np.float64) for v in (x, y, z)))
+        zz = np.nan if z is None else z
+        x, y, zz = np.broadcast_arrays(*(np.asarray(v, np.float64) for v in (x, y, zz)))
         if crs is not None:
             if self.crs is None:
                 raise ValueError("the tree has no crs (tree.crs is None): give x, y in the tree's metres")
@@ -229,12 +232,34 @@ class LinearOctree:
                 x, y = Transformer.from_crs(crs, self.crs, always_xy=True).transform(x, y)
                 x, y = np.asarray(x, np.float64), np.asarray(y, np.float64)
         h = float(self.voxel_size)
-        f = [(v - o) / h for v, o in zip((x, y, z), self.origin)]
+        f = [(v - o) / h for v, o in zip((x, y, zz), self.origin)]
         inside = np.ones(x.shape, bool)
-        for v, n in zip(f, self.shape):
+        for v, n in zip(f[:2], self.shape):
             inside &= np.isfinite(v) & (v >= 0) & (v < n)
-        i, j, k = (np.floor(np.where(inside, v, 0)).astype(np.int64) for v in f)
+        i, j = (np.floor(np.where(inside, v, 0)).astype(np.int64) for v in f[:2])
+        if z is None:
+            f[2] = self._ground_top(i, j) + float(height) / h
+        inside &= np.isfinite(f[2]) & (f[2] >= 0) & (f[2] < self.shape[2])
+        k = np.floor(np.where(inside, f[2], 0)).astype(np.int64)
         return np.where(inside, self.locate(i, j, k), -1)[()]
+
+    def _ground_top(self, i, j):
+        """Top of the ground (the "ground" class and its parts) in voxels
+        over voxel columns (i, j), counting ground cells stacked from z = 0."""
+        if self.classes is None or "ground" not in self.classes.names:
+            raise ValueError('z=None means street level, which needs a "ground" class in '
+                             "tree.classes: give z (metres in the tree's frame)")
+        ground = self.classes.descendants("ground")
+        shape = np.shape(i)
+        i, j = np.ravel(i), np.ravel(j)
+        top = np.zeros(i.size, np.int64)
+        todo = np.arange(i.size)
+        while todo.size:                       # climb one ground leaf at a time
+            leaf = self.locate(i[todo], j[todo], top[todo])
+            ok = (leaf >= 0) & np.isin(self.label[np.maximum(leaf, 0)], ground)
+            todo, leaf = todo[ok], leaf[ok]
+            top[todo] = morton.decode(self.code[leaf])[2] + np.left_shift(1, self.level[leaf].astype(np.int64))
+        return top.reshape(shape)
 
     def label_at(self, x, y, z):
         return self.label[self.locate(x, y, z)]

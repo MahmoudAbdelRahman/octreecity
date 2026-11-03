@@ -4,16 +4,30 @@
 
 ### New
 
-- Point data on cells: `fill.from_points(tree, x, y, z, values, how=...,
-  crs=...)` puts sensors, POIs or survey points into the leaves that
-  contain them and gives one value per leaf: mean, sum, count, min, max,
-  std, or mode for categories and ids (exact int64, -1 where there is no
-  point). `crs="EPSG:4326"` takes lon, lat. `values` may be a dict of
-  columns; without values the points are counted. Points outside the box
-  are dropped with a warning that says how many. Ids (names in
-  `tree.id_columns`, or integers too big for float64) are never averaged.
-- `tree.cell_at(x, y, z, crs=None)`: the leaf of each point, given in
-  metres in the tree's frame (as `centers()`) or in any crs; -1 outside.
+- Point data on cells: `fill.from_points(tree, df, x="lon", y="lat",
+  crs="EPSG:4326")` puts sensors, POIs or survey points into the leaves
+  that contain them and writes one value per leaf and column into
+  `tree.cells`.
+  - Any table works: pandas, polars, a pyarrow Table, a DuckDB result, a
+    dict of arrays. A GeoDataFrame gives x, y and crs from its geometry.
+    pandas is not a dependency.
+  - Every column except the positions is used by default (`columns=`
+    picks some). Numbers get the mean, text the most common value, ids the
+    id all points share (else -2). `how=` sets one summary for all columns
+    or a dict per column: mean, sum, count, min, max, std, mode, same.
+  - Ids (`id` / `..._id` integers, `tree.id_columns`, integers too big for
+    float64) stay exact int64, are never averaged and are added to
+    `tree.id_columns`. A clash with existing ids (a city's `id`) is refused.
+  - No height (`z=None`): 1.5 m above the ground under each point (street
+    level; `height=` changes it).
+  - Data bigger than memory: give an iterable of chunks
+    (`pd.read_csv(..., chunksize=...)`, pyarrow batches) for the same
+    result. Every summary except `mode` combines across chunks.
+  - A plain array of values (or none, to count points) returns one array.
+  - Points outside the box are dropped, with a warning that says how many.
+- `tree.cell_at(x, y, z=None, crs=None)`: the leaf of each point, given in
+  metres in the tree's frame (as `centers()`) or in any crs; -1 outside;
+  z=None is street level.
 - How-to: [your own point data on cells](docs/how-to/point-data.md).
 
 ### Fixed

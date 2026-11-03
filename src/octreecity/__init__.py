@@ -8,6 +8,7 @@ City-specific names live in octreecity.urban.
 from . import urban
 from .city import build_city
 from .classes import EMPTY, Classes
+from .mesh import Mesh, read_mesh
 from .objects import ObjectTable, object_id
 from .occupancy import Occupancy
 from .octree import LinearOctree, pad_to_multiple, rasterize_columns
@@ -16,6 +17,6 @@ from .urban import AIR, BUILDING, GROUND, TREE
 
 __version__ = "0.4.1"
 
-__all__ = ["build_city", "Classes", "EMPTY", "LinearOctree", "ObjectTable", "Occupancy", "Store",
-           "object_id", "pad_to_multiple", "rasterize_columns", "urban", "AIR", "BUILDING", "GROUND",
-           "TREE"]
+__all__ = ["build_city", "Classes", "EMPTY", "LinearOctree", "Mesh", "ObjectTable", "Occupancy",
+           "Store", "object_id", "pad_to_multiple", "rasterize_columns", "read_mesh", "urban", "AIR",
+           "BUILDING", "GROUND", "TREE"]

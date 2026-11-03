@@ -283,12 +283,39 @@ class Surfaces:
     def __len__(self):
         return len(self.polygons)
 
+    def to_mesh(self, keep=None):
+        """A Mesh with one part per object (named by gml id), for
+        CityBuilder.add_meshes: closed solids (LoD1/LoD2 buildings) are
+        filled, not just their skin. Each polygon is split into triangles
+        in its own plane. keep: an optional mask of polygons to use, e.g.
+        s.kind != "lod1Solid" when a file holds both LoD1 and LoD2."""
+        from .mesh import Mesh, _split_polygon
+
+        keep = np.ones(len(self), bool) if keep is None else np.asarray(keep, bool)
+        verts, faces, part, n = [], [], [], 0
+        for k in np.nonzero(keep)[0]:
+            ring = np.asarray(self.polygons[k], np.float64)
+            if len(ring) > 1 and np.allclose(ring[0], ring[-1]):
+                ring = ring[:-1]
+            if len(ring) < 3:
+                continue
+            t = np.asarray(_split_polygon(ring) if len(ring) > 3 else [(0, 1, 2)], np.int64)
+            verts.append(ring)
+            faces.append(t + n)
+            part.append(np.full(len(t), self.obj[k], np.int64))
+            n += len(ring)
+        names = [str(o.get("id", i)) for i, o in enumerate(self.objects)]
+        if not verts:
+            return Mesh(np.zeros((0, 3)), np.zeros((0, 3), np.int64), None, names)
+        return Mesh(np.concatenate(verts), np.concatenate(faces), np.concatenate(part), names)
+
 
 def read_citygml_surfaces(path, tag="Building"):
     """3D surfaces of every `tag` object in a CityGML file (any LoD), with
     their semantic kind (wall, roof, ground ... as named in the file) and
     the object's attributes (gen:*Attribute values, measuredHeight).
-    Turn them into voxels with octreecity.sources.SparseSource.from_surfaces."""
+    Fill closed solids with CityBuilder.add_meshes(surfaces.to_mesh());
+    mark the surfaces only with octreecity.sources.SparseSource.from_surfaces."""
     from lxml import etree
 
     opener = gzip.open if str(path).endswith(".gz") else open

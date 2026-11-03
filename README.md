@@ -51,7 +51,8 @@ models (OBJ) for Blender, Rhino or Unity, shaded maps and sections.
 
 **Any data source.** Build a city for any place from OpenStreetMap in one
 line, or from your own data: CityGML (PLATEAU, V-World and others), GeoJSON,
-building footprints, terrain rasters, land cover and trees.
+building footprints, 3D models (OBJ, PLY, STL, LoD2 solids, with leaning walls
+and overhangs), terrain rasters, land cover and trees.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/MahmoudAbdelRahman/octreecity/main/outputs/report/adapt_sun_section.png" width="100%" alt="3D shadow volumes: cells refine along shadow edges in the air above Osaka">
@@ -282,8 +283,9 @@ rebuilds the token sets of its paper's experiments exactly
   light), and trees are treated as opaque.
 - The parallel tiled builder handles buildings and land cover, not yet trees
   or terrain.
-- Point clouds and 3D surfaces (`SparseSource.from_points`, `from_surfaces`)
-  mark surfaces only: the inside of a closed solid stays empty.
+- Point clouds and loose 3D surfaces (`SparseSource.from_points`,
+  `from_surfaces`) mark surfaces only. Closed 3D models are filled as solids
+  with `CityBuilder.add_meshes`.
 
 Questions, ideas and issues are welcome on
 [GitHub](https://github.com/MahmoudAbdelRahman/octreecity/issues); see

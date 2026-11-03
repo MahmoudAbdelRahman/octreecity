@@ -12,6 +12,7 @@ label) in a projected CRS, in metres. `CityBuilder` turns them into voxels.
 | Overpass API JSON (`out geom;`) | `sources.read_osm_overpass(json, crs_to=EPSG)`: keeps the OSM type and id (`attrs["source_id"]`), holes, `min_height` of building parts |
 | A list of (WKB, height) pairs | `Features.from_wkb(pairs)` |
 | Anything shapely can make | `Features(geoms, height=..., base=...)` |
+| 3D models: OBJ, PLY, STL, LoD2 CityGML solids | `read_mesh(path)`, `read_citygml_surfaces(path).to_mesh()`, then `b.add_meshes(m)`: see [3D models](3d-models.md) |
 
 `read_citygml` takes the footprint from the union of all polygons of a
 building, the base from the attribute `base_height_m` or the lowest point, and
@@ -37,6 +38,7 @@ b.add_landcover(rivers, WATER, line_width=6)
 b.add_landcover(roads, ROAD, line_width=widths)   # lines are buffered
 b.add_trees(woods, top=14, base=4)          # canopy from 4 to 14 m, air below
 b.add_buildings(buildings)                  # stand on the lowest terrain under them
+b.add_meshes(mesh)                          # 3D models as solids (see 3d-models.md)
 b.add_solid(base_abs, top_abs, label)       # any other layer: bottom and top rasters (m) and a label
 city = b.build(air_above=20)
 ```

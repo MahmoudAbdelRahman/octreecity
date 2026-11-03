@@ -19,6 +19,7 @@ nav:
       - Quickstart: tutorials/quickstart.md
   - How-to guides:
       - Use your own data: how-to/own-data.md
+      - Use 3D models of buildings: how-to/3d-models.md
       - Objects and queries: how-to/objects-and-queries.md
       - 3D views: how-to/3d-views.md
       - Sky view, shadows, sun hours: how-to/sky-and-sun.md

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### New
+
+- 3D models as solid buildings: `read_mesh(path)` reads OBJ, PLY and STL
+  files into a `Mesh` (triangles grouped into parts, one per building), with
+  no new dependency. `CityBuilder.add_meshes(mesh, ids=...)` fills each part
+  as a solid next to footprint buildings and terrain: leaning walls, sloped
+  roofs, overhangs and sky bridges (two runs in one column) and hollow parts
+  keep their form, under the same centre rule as every other shape. Missing
+  floors are closed at the part's bottom; other holes in top or bottom faces
+  are closed using the face directions, with a warning. `fill=False` marks
+  only the surface; `base="terrain"` puts each part on the ground.
+  `Mesh.place(at=, rotate=, scale=, up="y")` moves a local model into the
+  city. Other formats: pass `Mesh(vertices, faces)` from any loader.
+- `Surfaces.to_mesh()`: LoD2 CityGML buildings from `read_citygml_surfaces`
+  are filled as solids with `add_meshes`.
+- New how-to: [Use 3D models of buildings](docs/how-to/3d-models.md).
+
+### Changed
+
+- Needs shapely 2.1 or newer (for splitting concave polygons into
+  triangles).
+
 ### Fixed
 
 - `g.cells()` and `g.to_pandas()` no longer fail on a tree without class

@@ -77,25 +77,63 @@ def render_section(city, ax, y, x0=0, x1=None):
     return img
 
 
-def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True):
-    """Draw the leaves cut by the plane axis = index (voxel units)."""
+def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True, color=None, colorscale=None,
+               cmin=None, cmax=None, nan="grey", legend=True):
+    """Draw the leaves cut by the plane axis = index (voxel units).
+
+    colors: {label: colour} for the cells (default: light air, darker
+    buildings); with color=, {category: colour} for its categories.
+    color: colour the cells by a value instead of by label, as
+    viz.show_octree(color=...): a tree.cells column name, a built-in column
+    ("size_m", "z", "class", ...) or an array with one value per leaf.
+    Numbers get a colour bar (colorscale: a matplotlib or plotly name,
+    default "viridis"; cmin / cmax, default: the range over the whole tree);
+    categories get a legend (legend=False for none). Solids without a value
+    keep their label colour; air without a value is grey (nan="grey") or
+    left out (nan="hide").
+    """
     from matplotlib.collections import PolyCollection
 
-    if colors is None:
-        colors = dict(COLORS)
-        colors.update({0: "#f4f6fb", 2: "#5b6b8c"})       # light air, darker buildings on a light plot
     k = "xyz".index(axis)
     if index is None:
         index = tree.shape[k] // 2
+    if not 0 <= index < tree.shape[k]:
+        raise ValueError(f"index={index} is outside the tree: voxels along {axis} go from 0 to {tree.shape[k] - 1}")
     c = tree.corners()
     s = tree.sizes()
     hit = (c[k] <= index) & (index < c[k] + s)
-    u, v = [c[i][hit] for i in range(3) if i != k]
-    w = s[hit]
+    ix = np.nonzero(hit)[0]
+    base = dict(COLORS)
+    base.update({0: "#f4f6fb", 2: "#5b6b8c"})            # light air, darker buildings on a light plot
+    col = None
+    if color is None:
+        colors = base if colors is None else colors
+        fc = np.array([colors.get(int(l), "#d33") for l in tree.label[ix]], dtype=object)
+    else:
+        from ._colors import MISSING, check_nan, resolve
+
+        nan = check_nan(nan)
+        style = {L: (NAMES.get(L, "air" if L == AIR else f"label {L}"), base.get(L)) for L in base}
+        col = resolve(tree, color, None, colorscale or "viridis", cmin, cmax, colors=colors, label_style=style)
+        col.focus(ix)
+        miss = col.missing[ix]
+        solid_miss = miss & (tree.label[ix] != AIR)
+        if col.numeric:
+            cmap, norm = _cmap(col.colorscale), _norm(col)
+            rgb = np.round(cmap(norm(np.nan_to_num(col.values[ix])))[:, :3] * 255).astype(int)
+            fc = np.array(["#%02x%02x%02x" % tuple(v) for v in rgb.tolist()], dtype=object)
+        else:
+            fc = col.hex(ix).astype(object)
+        fc[miss] = MISSING
+        fc[solid_miss] = [base.get(int(l), "#d33") for l in tree.label[ix[solid_miss]]]
+        if nan == "hide":
+            show = ~miss | solid_miss
+            ix, fc = ix[show], fc[show]
+    u, v = [c[i][ix] for i in range(3) if i != k]
+    w = s[ix]
     quads = np.stack([np.stack([u, v], 1), np.stack([u + w, v], 1),
                       np.stack([u + w, v + w], 1), np.stack([u, v + w], 1)], 1)
-    fc = [colors.get(int(l), "#d33") for l in tree.label[hit]]
-    pc = PolyCollection(quads * tree.voxel_size, facecolors=fc,
+    pc = PolyCollection(quads * tree.voxel_size, facecolors=list(fc),
                         edgecolors="#33333355" if edge else "none", linewidths=0.3)
     ax.add_collection(pc)
     dims = [tree.shape[i] * tree.voxel_size for i in range(3) if i != k]
@@ -105,4 +143,76 @@ def plot_slice(tree, ax, axis="y", index=None, colors=None, edge=True):
     names = [n for n in "xyz" if n != axis]
     ax.set_xlabel(f"{names[0]} (m)")
     ax.set_ylabel(f"{names[1]} (m)")
+    if col is not None and legend:
+        cut = np.nonzero(hit)[0]
+        _slice_key(ax, col, cut, nan, int((col.missing[cut] & (tree.label[cut] == AIR)).sum()))
     return pc
+
+
+def _cmap(name):
+    """A matplotlib colormap from a matplotlib name, a plotly name ("Viridis",
+    "Portland", "RdBu_r") or a plotly scale [[0, colour], ..., [1, colour]]."""
+    import matplotlib
+    from matplotlib.colors import Colormap, LinearSegmentedColormap
+
+    if isinstance(name, Colormap):
+        return name
+    if isinstance(name, str):
+        for n in (name, name.lower()):
+            try:
+                return matplotlib.colormaps[n]
+            except KeyError:
+                continue
+        try:
+            import plotly.colors
+
+            scale, label = plotly.colors.get_colorscale(name), name
+        except Exception:
+            raise ValueError(f"unknown colour scale {name!r}; use a matplotlib or plotly name such as "
+                             "'viridis'") from None
+    else:
+        scale, label = name, "custom"
+    stops = [(float(pos), _rgb_any(col)) for pos, col in scale]
+    return LinearSegmentedColormap.from_list(label, stops)
+
+
+def _rgb_any(color):
+    """'#rrggbb', 'rgb(r, g, b)' or a matplotlib colour name -> (r, g, b) in 0..1."""
+    from matplotlib.colors import to_rgb
+
+    color = str(color).strip()
+    if color.startswith("rgb"):
+        nums = [float(v) for v in color[color.index("(") + 1:color.index(")")].split(",")[:3]]
+        return tuple(v / 255 for v in nums)
+    return to_rgb(color)
+
+
+def _norm(col):
+    from matplotlib.colors import Normalize
+
+    return Normalize(col.cmin, col.cmax)
+
+
+def _slice_key(ax, col, ix, nan, n_missing_air):
+    """Colour bar (numbers) or legend (categories) for plot_slice."""
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.patches import Patch
+
+    from ._colors import LEGEND_MAX, MISSING
+
+    if col.numeric:
+        if not col.empty:                                 # no value anywhere: no colour bar to read
+            ax.figure.colorbar(ScalarMappable(_norm(col), _cmap(col.colorscale)), ax=ax, label=col.name, shrink=0.8)
+        handles = []
+    else:
+        counts = col.counts(ix)
+        present = np.nonzero(counts)[0]
+        if present.size > LEGEND_MAX:
+            handles = [Patch(color="none", label=f"{present.size:,} {col.name} values (colours repeat)")]
+        else:
+            handles = [Patch(color=col.colors[j], label=f"{col.names[j]} ({counts[j]:,})") for j in present]
+    if n_missing_air:
+        handles.append(Patch(color=MISSING, label=f"no value ({n_missing_air:,})") if nan == "grey"
+                       else Patch(color="none", label=f"no value: {n_missing_air:,} hidden"))
+    if handles:
+        ax.legend(handles=handles, title=None if col.numeric else col.name, fontsize=8, loc="upper right")

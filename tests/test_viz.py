@@ -140,11 +140,11 @@ def test_big_selection_is_thinned_evenly_with_a_note():
     cap = len(g) // 4
     f = g.show(max_cells=cap)
     names = wire_names(f)
-    assert any("drawn (evenly spread)" in n for n in names)
-    sizes = {n for n in names if n.endswith("m cells")}
-    assert len(sizes) == len(np.unique(t.level[g.idx]))      # every size still shows
-    edges = sum(len([x for x in tr.x if x is None]) for tr in f.data
-                if tr.type == "scatter3d" and tr.name.endswith("m cells"))
+    assert any("drawn, evenly spread)" in n for n in names)
+    assert len(names) == len(set(names))                     # one entry per size, not "1 m cells" twice
+    sizes = [n.split(" m cells")[0] for n in names]
+    assert len(set(sizes)) == len(sizes) == len(np.unique(t.level[g.idx]))      # every size still shows
+    edges = sum(len([x for x in tr.x if x is None]) for tr in f.data if tr.type == "scatter3d")
     assert edges <= 12 * cap
     from octreecity.viz import show_octree
 

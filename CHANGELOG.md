@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Data on cells, seen: `color=` colours any cell by a value in every view:
+  `show_octree` (wire cubes, cutaway faces, shells), `show_selection` /
+  `g.show()`, `show_cells` and `render.plot_slice`.
+  - The cells themselves take the colour, at their real size: filled
+    cubes (`g.show(style="cubes")`, `show_octree(cells=g, style="cubes")`,
+    thin seams between cells, `opacity=`), wire cubes, cut faces and
+    sections, shell faces. Works on any tree, also trees split where a
+    value changes (`build(..., varies(...))`, `adapt`).
+  - A `tree.cells` column name, a built-in column (`size_m`, `z`, `level`,
+    `class`, `label` ...), a group value (`steps`, `distance`) or an array
+    with one value per cell.
+  - Numbers: a colour scale with a colour bar (`colorscale`, `cmin`,
+    `cmax`; by default the range over the whole tree, or the selection, so
+    thinning or a cut never changes the colours).
+  - Categories (text, bools, class / label, object ids, integers with at
+    most 12 values): one distinct colour each with a legend, never a
+    gradient. Ids stay exact int64.
+  - Cells without a value (NaN, None, id -1): grey or hidden
+    (`nan="grey" | "hide"`), counted in the legend. On cuts, buildings
+    without a value keep their own colour.
+  - Views past `max_cells` (15,000 wire or 25,000 filled cubes) are thinned
+    evenly, every size kept, and the legend says how many cells are drawn.
+  - How-to: "Data on cells" in docs/how-to/3d-views.md.
+
+### Fixed
+
+- `show_octree(style="cutaway", cells=g)` silently drew wire cubes; it now
+  warns that `style` is not used with `cells=`. An unknown `style` is an
+  error.
+- A thinned selection listed each thinned size twice in the legend ("1 m
+  cells" and "1 m cells: 2,000 of 8,000 drawn"); now once, with the counts.
+- Even thinning now uses the whole `max_cells` budget (it could draw about
+  half of it).
+- Wire cubes were placed on a 0.1 m grid (wrong cells for 0.25 m voxels);
+  now to the millimetre.
+- `cut=`, `y=` (and `plot_slice` `index=`) outside the block gave an empty
+  view; now an error that gives the valid range (metres from the tree's
+  corner, not absolute coordinates).
+- Trees with more than 254 classes: classes 258, 259 ... were drawn as
+  buildings and trees in the 3D views.
+
 ## 0.4.3
 
 ### New

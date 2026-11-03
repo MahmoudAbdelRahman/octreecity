@@ -24,6 +24,57 @@
 - Needs shapely 2.1 or newer (for splitting concave polygons into
   triangles).
 
+## 0.4.3
+
+### New
+
+- Progress messages for slow steps, on one line that updates in place
+  (terminal and Jupyter; one line per step in log files):
+  - The OpenStreetMap download (`fetch_osm`, `city_from_osm`) shows the
+    time while the server thinks, the bytes received, busy servers and
+    retries, then a summary ("2,314 buildings, 812 roads and paths ... in
+    18.2 s (1.9 MB)").
+  - Bars for `CityBuilder.build`, `to_octree`, `links.neighbours` /
+    `across` (and the time for `links.within`), `sun_hours`,
+    `sky_view_factor`, `write_obj`, `write_vtk`, `Store.build`,
+    `build_tiled` and `read_citygml`. Only steps longer than one second
+    show anything.
+  - `quiet=True` on each of them, `octreecity.progress.quiet(True)`, or
+    `OCTREECITY_QUIET=1` switches it off. Messages go to stderr and to the
+    logger "octreecity". No new dependency.
+- Point data on cells: `fill.from_points(tree, df, x="lon", y="lat",
+  crs="EPSG:4326")` puts sensors, POIs or survey points into the leaves
+  that contain them and writes one value per leaf and column into
+  `tree.cells`.
+  - Any table works: pandas, polars, a pyarrow Table, a DuckDB result, a
+    dict of arrays. A GeoDataFrame gives x, y and crs from its geometry.
+    pandas is not a dependency.
+  - Every column except the positions is used by default (`columns=`
+    picks some). Numbers get the mean, text the most common value, ids the
+    id all points share (else -2). `how=` sets one summary for all columns
+    or a dict per column: mean, sum, count, min, max, std, mode, same.
+  - Ids (`id` / `..._id` integers, `tree.id_columns`, integers too big for
+    float64) stay exact int64, are never averaged and are added to
+    `tree.id_columns`. A clash with existing ids (a city's `id`) is refused.
+  - No height (`z=None`): 1.5 m above the ground under each point (street
+    level; `height=` changes it).
+  - Data bigger than memory: give an iterable of chunks
+    (`pd.read_csv(..., chunksize=...)`, pyarrow batches) for the same
+    result. Every summary except `mode` combines across chunks.
+  - A plain array of values (or none, to count points) returns one array.
+  - Points outside the box are dropped, with a warning that says how many.
+- `tree.cell_at(x, y, z=None, crs=None)`: the leaf of each point, given in
+  metres in the tree's frame (as `centers()`) or in any crs; -1 outside;
+  z=None is street level.
+- How-to: [your own point data on cells](docs/how-to/point-data.md).
+
+### Fixed
+
+- `tree.locate(i, j, k)` returns -1 for a voxel outside the box; before,
+  it silently returned a wrong leaf.
+
+## 0.4.2
+
 ### Fixed
 
 - `g.cells()` and `g.to_pandas()` no longer fail on a tree without class

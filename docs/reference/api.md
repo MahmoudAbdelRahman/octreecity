@@ -8,14 +8,15 @@ Core (no domain words):
 | `octreecity.sources` | `GridSource`, `OccupancySource`, `SparseSource` (`from_points`, `from_surfaces`), `Source`, `Summary` |
 | `octreecity.build` | `build(source, rule, max_level, min_level)`, `uniform(source, level)` |
 | `octreecity.rules` | `mixed`, `varies`, `changes`, `larger_than`, `where`, `never`; combine with `\|` `&` `~` |
-| `octreecity.octree` | `LinearOctree`: cell table (`label`, `cells`, `series`, `add_snapshot`), `id_columns`, `crs`, `objects`, `parents` (`reduce`, `how="same"` for ids), `in_box`, `balance`, `refine_where`, `select`, `touching`, `near` |
+| `octreecity.octree` | `LinearOctree`: cell table (`label`, `cells`, `series`, `add_snapshot`), `id_columns`, `crs`, `objects`, `parents` (`reduce`, `how="same"` for ids), `cell_at` (leaf of a point in metres or lon/lat, -1 outside, z=None: street level), `locate` (leaf of a voxel, -1 outside), `in_box`, `balance`, `refine_where`, `select`, `touching`, `near` |
 | `octreecity.objects` | `ObjectTable` (`add`, `add_overlap`, `merge`, `select`, `tag`, `parent`, `children`, `siblings`, `ancestors`, `descendants`, `save` / `load`), `object_id`, `IdCollision` |
 | `octreecity.query` | `Query`, `Group` (`neighbours`, `within`, `nearest`, `boundary`, `parents`, `siblings`, `objects`, `voxels`, `show`), `Nodes`, `neighbour_pairs`, `cube_ids` |
 | `octreecity.store` | `Store` (`create`, `open`, `write_tile`, `read_tile`, `read_tree`, `region`, `objects`, `edit_objects`, `build`, `compact`, `snapshot`), `round_tile` |
-| `octreecity.fill` | `from_raster`, `from_grid`, `from_function`, `from_source`, `carry` |
+| `octreecity.fill` | `from_raster`, `from_grid`, `from_function`, `from_source`, `from_points` (any point table, GeoDataFrame or chunks onto the cells: mean, sum, count, min, max, std, mode, same), `carry` |
 | `octreecity.links` | `Links`, `neighbours`, `hierarchy`, `across`, `within`, `face_pairs` |
 | `octreecity.learn` | `tokens`, `Tokens` (`concat`, `to_torch`, `save`), `pixel_map`, `batches`, `reach_m` |
 | `octreecity.measure` | `growth`, `table`, `timed` |
+| `octreecity.progress` | progress lines for slow steps: `quiet`, `bar`, `wait`, `note`, `DELAY`; `quiet=True` on each slow function |
 | `octreecity.attention` | `LinkModel`, `LinkAttention`, `fit`, `predict` (needs `octreecity[torch]`) |
 
 City tools (use the `octreecity.urban` preset of class names):

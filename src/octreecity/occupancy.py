@@ -338,7 +338,8 @@ class Occupancy:
         The box is topped up with empty space to a multiple of the largest
         cell (2**max_level voxels) in x, y and z, so any city size works: the
         extra cells lie beyond the city's far (east and north) edges and the
-        top, and merge into large empty cells.
+        top, and merge into large empty cells. Shows a bar on long builds
+        (quiet=True: never; see octreecity.progress).
         """
         from .build import build
         from .rules import changes, mixed

@@ -19,6 +19,7 @@ tiles share the z origin and cell size; each has its own height (nz).
 import io
 import json
 import zipfile
+from pathlib import Path
 
 import numpy as np
 
@@ -133,13 +134,15 @@ def _build_one(args):
 
 
 def build_tiled(path, buildings, cell=1.0, tile=256.0, bbox=None, landcover=(), workers=8,
-                air_above=20.0, crs=None, progress=None):
+                air_above=20.0, crs=None, progress=None, quiet=None):
     """Build a whole city into a tiled store, in parallel.
 
     buildings: Features with heights (flat terrain). landcover: list of
     (Features, label) or (Features, label, line_width). bbox: (x0, y0, x1,
     y1), default the buildings' extent snapped to the tile grid. Tiles with
     no building are skipped. Returns the number of tiles written.
+    progress(done, total) is called after each tile; a bar is shown too
+    (quiet=True: no bar).
     """
     from concurrent.futures import ProcessPoolExecutor
     import shapely
@@ -168,10 +171,14 @@ def build_tiled(path, buildings, cell=1.0, tile=256.0, bbox=None, landcover=(), 
                 layers.append((list(shapely.to_wkb(f.geoms[k])), lab, None if lw is None else np.asarray(lw)[k] if np.ndim(lw) else lw))
             jobs.append((i, j, x0, y0, tile, cell, air_above,
                          (list(wkb_b[idx]), h[idx].tolist(), buildings.base[idx].tolist()), layers))
-    with TiledCityWriter(path, bx0, by0, -cell, tile, cell, crs=crs) as w:
-        with ProcessPoolExecutor(workers) as ex:
+    from . import progress as _progress
+
+    with TiledCityWriter(path, bx0, by0, -cell, tile, cell, crs=crs) as w, \
+            _progress.bar(len(jobs), f"tiles: {Path(path).name}", "tiles", quiet) as bar:
+        with ProcessPoolExecutor(workers, initializer=_progress.worker_quiet) as ex:
             for n, (i, j, city) in enumerate(ex.map(_build_one, jobs, chunksize=4)):
                 w.add(i, j, city)
+                bar.update()
                 if progress:
                     progress(n + 1, len(jobs))
     return len(jobs)

@@ -379,7 +379,8 @@ class SparseSource(Source):
         is sampled on a grid of `spacing` (default half a voxel) in its own
         plane, then as from_points. labels / attrs / ids: one value per
         polygon (ids: {layer: object id per polygon}).
-        Like a point cloud, this marks the surfaces; insides stay empty."""
+        Like a point cloud, this marks the surfaces; insides stay empty.
+        To fill closed solids, use CityBuilder.add_meshes (octreecity.mesh)."""
         sp = voxel_size / 2 if spacing is None else float(spacing)
         pts, owner = [], []
         for k, ring in enumerate(polygons):

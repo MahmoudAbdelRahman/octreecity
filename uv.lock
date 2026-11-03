@@ -3361,7 +3361,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=14.0" },
     { name = "pyproj", specifier = ">=3.6" },
     { name = "scipy", specifier = ">=1.11" },
-    { name = "shapely", specifier = ">=2.0" },
+    { name = "shapely", specifier = ">=2.1" },
     { name = "torch", marker = "extra == 'torch'", specifier = ">=2.1" },
 ]
 provides-extras = ["viz", "notebook", "torch"]

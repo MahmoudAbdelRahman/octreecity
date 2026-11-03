@@ -25,8 +25,9 @@ City tools (use the `octreecity.urban` preset of class names):
 |---|---|
 | `octreecity.urban` | `CLASSES`, `AIR`, `GROUND`, `BUILDING`, `TREE`, `WATER`, `GRASS`, `PAVEMENT`, `ROAD`, colours |
 | `octreecity.easy` | `city_from_osm(lat, lon, size_m)`: one call, any place, data from OpenStreetMap, with object ids; `osm_builder` for one tile |
-| `octreecity.features` | `read_citygml` (footprints), `read_citygml_surfaces` (3D surfaces with their kind), `read_geojson`, `read_osm_overpass`, `Features`, `Surfaces`, `reproject` |
-| `octreecity.builder` | `CityBuilder`: terrain, land cover, trees, buildings, zones, any shapes, each with ids; `rasterize`, `footprint_pairs` |
+| `octreecity.features` | `read_citygml` (footprints), `read_citygml_surfaces` (3D surfaces with their kind; `Surfaces.to_mesh()` for solids), `read_geojson`, `read_osm_overpass`, `Features`, `Surfaces`, `reproject` |
+| `octreecity.builder` | `CityBuilder`: terrain, land cover, trees, buildings, 3D models (`add_meshes`), zones, any shapes, each with ids; `rasterize`, `footprint_pairs` |
+| `octreecity.mesh` | `Mesh` (`place`, `select`, `concat`, `bounds`), `read_mesh` (OBJ, PLY, STL), `column_runs`, `crossings`, `surface_points` |
 | `octreecity.occupancy` | `Occupancy`: the storage format, ids per run (`ids`, `id_at`, `voxels`, `voxel_counts`), `crop`, `concat_x`, `concat_y`, `pad_z`, `height_of`, `to_octree`, `to_dense`, `save` / `load` |
 | `octreecity.tiles` | `build_tiled`, `TiledCity` (`tile`, `region`), `TiledCityWriter` |
 | `octreecity.city` | `build_city(heights, pixel_size, min_cell, max_cell)` |

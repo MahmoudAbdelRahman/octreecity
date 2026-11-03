@@ -6,6 +6,7 @@ keeping which object each voxel belongs to.
     b.add_landcover(parks, GRASS)          # top ground voxel takes the label
     b.add_trees(canopies, top=12, base=3)  # canopy with air below
     b.add_buildings(buildings, ids=ids)    # Features with height (+ min_height)
+    b.add_meshes(mesh, ids=mesh_ids)       # 3D models as solids (octreecity.mesh)
     b.add_zones(landuse, zone_ids)         # a second id layer ("zone_id")
     city = b.build()                       # Occupancy (+ city.ids, city.objects)
 
@@ -152,6 +153,15 @@ class CityBuilder:
             if layer not in self.layers:
                 self.layers.append(layer)
         f, col = footprint_pairs(geoms, self.x0, self.y0, self.nx, self.ny, self.cell, line_width)
+        key = self._key(n, overlap, priority, ids)
+        o = np.lexsort((key[f], col))                   # by column, the winner last
+        lab = None if label is None else np.broadcast_to(np.asarray(label, np.uint8), (n,))
+        self.ops.append(dict(kind=kind, f=f[o], col=col[o], ids=ids, label=lab, layer=layer,
+                             overlap=overlap, n=n, index=len(self.ops), geoms=geoms, **z))
+        return self
+
+    def _key(self, n, overlap, priority, ids):
+        """Rank of each shape when shapes overlap: the highest wins."""
         if overlap == "by":
             if priority is None:
                 raise ValueError("overlap='by' needs priority= (an array, or an object-table column)")
@@ -159,16 +169,10 @@ class CityBuilder:
                 if ids is None:
                     raise ValueError("priority by column needs ids")
                 priority = self.objects.column(priority)[self.objects.rows(ids)]
-            key = np.argsort(np.argsort(np.asarray(priority, np.float64), kind="stable"), kind="stable")
-        elif overlap == "first":
-            key = np.arange(n)[::-1].copy()
-        else:
-            key = np.arange(n)
-        o = np.lexsort((key[f], col))                   # by column, the winner last
-        lab = None if label is None else np.broadcast_to(np.asarray(label, np.uint8), (n,))
-        self.ops.append(dict(kind=kind, f=f[o], col=col[o], ids=ids, label=lab, layer=layer,
-                             overlap=overlap, n=n, index=len(self.ops), geoms=geoms, **z))
-        return self
+            return np.argsort(np.argsort(np.asarray(priority, np.float64), kind="stable"), kind="stable")
+        if overlap == "first":
+            return np.arange(n)[::-1].copy()
+        return np.arange(n)
 
     def add_shapes(self, feats, label, bottom, top, ids=None, layer="id", overlap="keep",
                    priority=None, line_width=None):
@@ -212,6 +216,62 @@ class CityBuilder:
         return self._shapes("solid", feats, label, ids, layer, overlap, priority, line_width,
                             bottom=b, top=h, ground="terrain")
 
+    def add_meshes(self, mesh, label=BUILDING, ids=None, layer="id", overlap="keep", priority=None,
+                   base="mesh", fill=True):
+        """3D models as solid voxels (octreecity.mesh): one label and one id
+        per part of the Mesh (from read_mesh, Surfaces.to_mesh or
+        Mesh(vertices, faces, part)). Sloped and leaning walls, overhangs
+        and hollow shapes keep their form: a voxel is filled when its
+        centre is inside the part (a vertical ray through the column centre
+        crosses the part's faces an odd number of times below it).
+
+        Each part should be one closed solid. Holes in walls do no harm; a
+        missing floor or roof is closed using the direction of the faces
+        (stats[layer]["open_columns"] counts those columns, and a part
+        that is open in some columns only gives a warning).
+        fill=False paints only the voxels the faces pass through (for
+        meshes that are not solids: terrain, single walls).
+
+        base: "mesh" (z as given, metres in the terrain's height system) or
+        "terrain" (each part is moved up or down so its lowest point sits
+        on the lowest terrain under it, as add_buildings does).
+        Coordinates: metres in the builder's CRS (see Mesh.place).
+        ids / overlap / priority: as add_buildings, one per part."""
+        from .mesh import column_runs, surface_points
+
+        if overlap not in ("keep", "first", "last", "by"):
+            raise ValueError("overlap must be 'keep', 'first', 'last' or 'by'")
+        if base not in ("mesh", "terrain"):
+            raise ValueError("base must be 'mesh' or 'terrain'")
+        n = mesh.n_parts
+        if ids is not None:
+            ids = np.broadcast_to(np.asarray(ids, np.int64), (n,)).copy()
+            if layer not in self.layers:
+                self.layers.append(layer)
+        key = self._key(n, overlap, priority, ids)
+        n_open = np.zeros(n, np.int64)
+        if fill:
+            f, col, zb, zt, n_open, n_cols = column_runs(mesh, self.x0, self.y0, self.nx, self.ny, self.cell)
+            some = (n_open > 0) & (n_open < 0.9 * n_cols)
+            if some.any():
+                warnings.warn(f"{int(some.sum())} mesh part(s) have holes in their top or bottom faces "
+                              f"({int(n_open[some].sum()):,} columns, closed using the face directions; "
+                              f"first: {mesh.names[int(np.argmax(some))]!r}). Check the model, or use "
+                              "fill=False.", stacklevel=2)
+        else:
+            f, col, zb = surface_points(mesh, self.x0, self.y0, self.nx, self.ny, self.cell)
+            zt = zb
+        o = np.lexsort((key[f], col))                   # by column, the winner last
+        lab = np.broadcast_to(np.asarray(label, np.uint8), (n,))
+        zmin = np.full(n, np.inf)
+        if len(mesh):
+            np.minimum.at(zmin, mesh.part, mesh.vertices[mesh.faces, 2].min(1))
+        self.ops.append(dict(kind="mesh", f=f[o], col=col[o], f0=f[o], col0=col[o], zbm=zb[o], ztm=zt[o],
+                             key=key, skin=not fill, ids=ids, label=lab, layer=layer, overlap=overlap,
+                             n=n, index=len(self.ops), base=base, zmin=zmin, mesh=mesh,
+                             open=int(n_open.sum())))
+        return self
+
     def add_zones(self, feats, ids, layer="zone_id", on="solid", overlap="keep", priority=None):
         """Another kind of object that shares space with the first one (land-
         use zones, districts ...): ids only, no label, in their own layer,
@@ -242,6 +302,8 @@ class CityBuilder:
         c, ter = self.cell, self.terrain.ravel()
         if op["kind"] == "raster":
             return (op["bottom"] - z0) / c, (op["top"] - z0) / c
+        if op["kind"] == "mesh":
+            return self._mesh_ranges(op, z0)
         if op["kind"] in ("cover", "zone"):
             g = (ter[op["col"]] - z0) / c
             return g - 1.0, g
@@ -255,6 +317,46 @@ class CityBuilder:
             base = np.where(np.isfinite(op["base"][f]), op["base"][f], low[f])
             t = np.minimum(base, t)
         return (t + op["bottom"][f] - z0) / c, (t + op["top"][f] - z0) / c
+
+    def _mesh_ranges(self, op, z0):
+        c, f0, col0 = self.cell, op["f0"], op["col0"]
+        shift = np.zeros(op["n"])
+        if op["base"] == "terrain":
+            low = np.full(op["n"], np.inf)
+            np.minimum.at(low, f0, self.terrain.ravel()[col0])
+            if self._terrain_fn is not None:
+                low = self._lowest_terrain_mesh(op, low)
+            ok = np.isfinite(low) & np.isfinite(op["zmin"])
+            shift[ok] = low[ok] - op["zmin"][ok]
+        zb, zt = (op["zbm"] + shift[f0] - z0) / c, (op["ztm"] + shift[f0] - z0) / c
+        if not op["skin"]:
+            op["f"], op["col"] = f0, col0
+            return zb, zt
+        k = np.floor(zb)                                # the voxel each surface point is in
+        o = np.lexsort((k, op["key"][f0], col0))
+        f, col, k = f0[o], col0[o], k[o]
+        new = np.r_[True, (col[1:] != col[:-1]) | (f[1:] != f[:-1]) | (k[1:] != k[:-1])]
+        op["f"], op["col"] = f[new], col[new]
+        return k[new], k[new] + 1
+
+    def _lowest_terrain_mesh(self, op, low):
+        """As _lowest_terrain, for mesh parts that leave the box."""
+        from .mesh import column_runs
+
+        c = self.cell
+        i, j = np.divmod(op["col0"], self.ny)
+        edge = np.unique(op["f0"][(i == 0) | (j == 0) | (i == self.nx - 1) | (j == self.ny - 1)])
+        for k in edge:
+            m = op["mesh"].select(k)
+            (bx0, by0, _), (bx1, by1, _) = m.bounds()
+            i0, i1 = int(np.floor((bx0 - self.x0) / c - 0.5)), int(np.ceil((bx1 - self.x0) / c + 0.5))
+            j0, j1 = int(np.floor((by0 - self.y0) / c - 0.5)), int(np.ceil((by1 - self.y0) / c + 0.5))
+            _, cc, *_ = column_runs(m, self.x0 + i0 * c, self.y0 + j0 * c, i1 - i0, j1 - j0, c)
+            if cc.size:
+                ii, jj = np.divmod(np.unique(cc), j1 - j0)
+                low[k] = float(np.min(self._terrain_fn(self.x0 + (ii + i0 + 0.5) * c,
+                                                       self.y0 + (jj + j0 + 0.5) * c)))
+        return low
 
     def _lowest_terrain(self, op, low):
         """Lowest terrain under each footprint that leaves the box, from the
@@ -292,8 +394,8 @@ class CityBuilder:
         z0 = float(self.terrain.min() - gt) if z0 is None else float(z0)
         for op in self.ops:
             op["zb"], op["zt"] = self._z_ranges(op, z0)
-        tops = [np.nanmax(op["zt"]) for op in self.ops if op["kind"] in ("solid", "raster")
-                and np.isfinite(op["zt"]).any()]
+        tops = [np.nanmax(op["zt"]) for op in self.ops if op["kind"] in ("solid", "raster", "mesh")
+                and np.size(op["zt"]) and np.isfinite(op["zt"]).any()]
         zmax = max([(self.terrain.max() - z0) / c] + tops)
         nz = int(np.ceil(zmax + air_above / c)) if nz is None else int(nz)
         if nz > 65535:
@@ -301,10 +403,13 @@ class CityBuilder:
         if "id" in self.layers:                          # the main layer first
             self.layers.remove("id")
             self.layers.insert(0, "id")
-        rank = {"cover": 0, "solid": 1, "raster": 1, "zone": 2}
+        rank = {"cover": 0, "solid": 1, "raster": 1, "mesh": 1, "zone": 2}
         ops = sorted(self.ops, key=lambda o: (rank[o["kind"]], o["index"]))
         self.stats = {k: {"overlap_rows": 0, "overlap_voxels": 0, "max_members": 0,
-                          "overwritten_voxels": 0, "voxels": 0} for k in self.layers}
+                          "overwritten_voxels": 0, "voxels": 0, "open_columns": 0} for k in self.layers}
+        for op in self.ops:
+            if op["kind"] == "mesh" and op["ids"] is not None:
+                self.stats[op["layer"]]["open_columns"] += op["open"]
         self._rows, self._new_rows = {}, set()
         starts = range(0, self.nx, strip)
         parts = []

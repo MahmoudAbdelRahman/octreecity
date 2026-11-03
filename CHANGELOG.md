@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased (0.5.0)
+
+### New
+
+- Tiles know where they are on Earth. With a crs, every store tile, `.ocz`
+  tile and `.npz` file records its centre in lon/lat (WGS84), its heights,
+  and the id of its cell under each cell scheme: S2 level 13 (about 1 km)
+  by default. `store.place(i, j)`, `city.place()`, `tree.place()`.
+- `octreecity.places`: `store.place_table()` (one row per tile),
+  `near(t, lon, lat, metres)`, `find(t, scheme, id)`, `blocks`,
+  `split(t, S2(10), test=0.2)` for train/test splits by area, and `concat`
+  for several cities or sources in one table.
+- Your own cell schemes (3D ones too): any object with `name`, `level` and
+  `key(lon, lat, z_bottom_m, z_top_m)`. Pass them to `Store.create` /
+  `Store.open` / `add_places`; nothing is hardcoded.
+- `store.add_places(...)` fills in stores written before 0.5.
+
+### Changed
+
+- New dependency: `s2cell` (pure Python, no dependencies of its own).
+- File formats: `.npz` version "0.5", store manifest version 2. Older files
+  load as before (no place); 0.4 reads the new files (it ignores the new
+  keys).
+
 ## 0.4.2
 
 ### Fixed

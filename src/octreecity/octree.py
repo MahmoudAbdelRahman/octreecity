@@ -455,8 +455,19 @@ class LinearOctree:
         t.code = t.root_codes()[(off // root).astype(np.int64)] + off % root
         return t
 
+    def place(self, schemes=None):
+        """Where this data is on Earth: {"lonlat" (centre, WGS84), "z_m",
+        "places" (a cell id per scheme, default S2 level 13)}, or None
+        without crs. See octreecity.places."""
+        from . import places
+
+        return places.place_of(self, schemes)
+
     def meta(self):
+        from . import places
+
         return {"format": "octreecity.octree", "version": _io.FORMAT_VERSION, "crs": self.crs,
+                "place": places.safe_place_of(self),
                 "voxel_size": self.voxel_size, "origin": list(self.origin), "shape": list(self.shape),
                 "max_level": self.max_level, "id_columns": list(self.id_columns),
                 "units": {"voxel_size": "m", "origin": "m"},

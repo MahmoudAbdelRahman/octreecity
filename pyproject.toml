@@ -29,6 +29,7 @@ dependencies = [
     "pyproj>=3.6",
     "lxml>=5.0",
     "pyarrow>=14.0",
+    "s2cell>=1.8",
 ]
 
 [project.optional-dependencies]

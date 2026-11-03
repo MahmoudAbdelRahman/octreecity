@@ -3,7 +3,8 @@
 Any tile (or a rectangle of tiles) can be read without touching the rest,
 so a whole city never has to fit in memory. Layout inside the zip:
 
-    meta.json                  tile size, cell, origin, CRS, tile list
+    meta.json                  tile size, cell, origin, CRS, tile list (with each
+                               tile's place on Earth, since 0.5)
     t/<i>_<j>/counts.npy       runs per column (uint16)
     t/<i>_<j>/top.npy          run tops (uint16, voxels)
     t/<i>_<j>/label.npy        run labels (uint8)
@@ -22,6 +23,7 @@ import zipfile
 
 import numpy as np
 
+from . import places
 from .occupancy import Occupancy
 from .classes import EMPTY as AIR  # empty space
 
@@ -42,7 +44,16 @@ class TiledCityWriter:
             buf = io.BytesIO()
             np.lib.format.write_array(buf, np.ascontiguousarray(arr), allow_pickle=False)
             self.zf.writestr(f"t/{name}/{key}.npy", buf.getvalue())
-        self.meta["tiles"][name] = dict(nz=int(city.shape[2]), runs=int(city.n_runs), layers=list(city.ids))
+        m = self.meta
+        box = (m["x0"] + i * m["tile"], m["y0"] + j * m["tile"], m["x0"] + (i + 1) * m["tile"],
+               m["y0"] + (j + 1) * m["tile"])
+        z = (m["z0"], m["z0"] + city.shape[2] * m["cell"])
+        try:
+            place = places.place(m["crs"], box, z)
+        except Exception:
+            place = None                               # an unreadable crs must not stop writing
+        m["tiles"][name] = dict(nz=int(city.shape[2]), runs=int(city.n_runs), layers=list(city.ids),
+                                place=place)
 
     def close(self):
         self.zf.writestr("meta.json", json.dumps(self.meta))
@@ -67,6 +78,12 @@ class TiledCity:
     @property
     def tiles(self):
         return [tuple(map(int, k.split("_"))) for k in self.meta["tiles"]]
+
+    def place(self, i, j):
+        """Where tile (i, j) is on Earth (see octreecity.places), or None
+        (no crs, or a file written before 0.5)."""
+        e = self.meta["tiles"].get(f"{i}_{j}")
+        return None if e is None else e.get("place")
 
     def _arr(self, name, key):
         return np.lib.format.read_array(io.BytesIO(self.zf.read(f"t/{name}/{key}.npy")))

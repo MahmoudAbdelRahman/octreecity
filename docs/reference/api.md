@@ -33,8 +33,8 @@ City tools (use the `octreecity.urban` preset of class names):
 | `octreecity.city` | `build_city(heights, pixel_size, min_cell, max_cell)` |
 | `octreecity.adapt` | `adapt`, `sample`, `transfer`, `transfer_ids`, `jump_indicator` (split and merge by a field, CFD style) |
 | `octreecity.analysis` | `street_points`, `sky_view_factor`, `shadow`, `sun_position`, `sun_hours` |
-| `octreecity.viz` | `show`, `show_values`, `show_octree` (`cells=` for selections), `show_selection`, `show_cells`, `setup_notebook` |
-| `octreecity.render` | `render_top`, `render_section`, `plot_slice` (images) |
+| `octreecity.viz` | `show`, `show_values`, `show_octree` (`cells=` for selections; `color=` for data on cells), `show_selection`, `show_cells`, `setup_notebook` |
+| `octreecity.render` | `render_top`, `render_section`, `plot_slice` (images; `color=` for data on cells) |
 | `octreecity.exports` | `write_obj`, `surface_quads`, `tensors_2d`, `tensors_3d`, `write_vtk` |
 | `octreecity.foam` | `build_polymesh`, `check_polymesh`, `write_polymesh` (OpenFOAM) |
 | `octreecity.cli` | the `octreecity` command |

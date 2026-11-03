@@ -26,6 +26,7 @@ ground; tunnels and underground features are left out.
 import json
 import math
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -33,7 +34,7 @@ from pathlib import Path
 import numpy as np
 import shapely
 
-from . import urban  # noqa: F401  (kept for older code)
+from . import progress, urban  # noqa: F401  (urban kept for older code)
 from .builder import CityBuilder
 
 from .urban import BUILDING, GRASS, PAVEMENT, ROAD, WATER
@@ -64,11 +65,16 @@ def bbox_latlon(lat, lon, size_m):
     return lat - dlat, lon - dlon, lat + dlat, lon + dlon
 
 
-def fetch_osm(lat, lon, size_m, cache=None, timeout=90):
+def fetch_osm(lat, lon, size_m, cache=None, timeout=90, quiet=None):
     """Overpass JSON for buildings, land cover, trees, water and roads.
-    With cache (a file path), the answer is saved and reused."""
+    With cache (a file path), the answer is saved and reused. Shows the
+    wait, the bytes received, server switches and a summary (quiet=True:
+    nothing; see octreecity.progress)."""
     if cache and Path(cache).exists():
-        return json.loads(Path(cache).read_text())
+        out = json.loads(Path(cache).read_text())
+        progress.note(f"OpenStreetMap: using the saved answer in {cache} "
+                      f"({progress.size(Path(cache).stat().st_size)}), no download", quiet)
+        return out
     if cache:
         Path(cache).parent.mkdir(parents=True, exist_ok=True)
     s, w, n, e = bbox_latlon(lat, lon, size_m)
@@ -80,25 +86,89 @@ def fetch_osm(lat, lon, size_m, cache=None, timeout=90):
          f'way["waterway"]{b};relation["natural"]{b};relation["landuse"]{b};node["natural"="tree"]{b};'
          ");out geom;")
     data = urllib.parse.urlencode({"data": q}).encode()
+    where = f"{size_m:g} m around ({lat:.4f}, {lon:.4f})"
     errors = []
-    for attempt in range(2):
-        for url in OVERPASS:
+    t0 = time.perf_counter()
+    tries = 2
+    for attempt in range(tries):
+        for k, url in enumerate(OVERPASS):
+            host = urllib.parse.urlparse(url).netloc
             try:
-                req = urllib.request.Request(url, data=data, headers={"User-Agent": "octreecity"})
-                with urllib.request.urlopen(req, timeout=timeout + 30) as r:
-                    out = json.loads(r.read())
+                out, nbytes = _download(url, data, timeout, host, where, quiet)
                 break
             except Exception as exc:          # busy server: try the next mirror
                 errors.append(f"{url}: {exc}")
+                if k + 1 < len(OVERPASS):
+                    nxt = urllib.parse.urlparse(OVERPASS[k + 1]).netloc
+                    progress.note(f"OpenStreetMap: {host} {_why(exc)}, trying {nxt}…", quiet)
+                elif attempt + 1 < tries:
+                    progress.note(f"OpenStreetMap: {host} {_why(exc)}; every server failed, "
+                                  f"trying again in {5 * (attempt + 1)} s…", quiet)
+                else:
+                    progress.note(f"OpenStreetMap: {host} {_why(exc)}; every server failed", quiet)
         else:
-            time.sleep(5 * (attempt + 1))
+            if attempt + 1 < tries:
+                time.sleep(5 * (attempt + 1))
             continue
         break
     else:
         raise RuntimeError("all Overpass servers failed:\n" + "\n".join(errors))
     if cache:
         Path(cache).write_text(json.dumps(out))
+    progress.note(f"OpenStreetMap: {_osm_summary(out)} in {time.perf_counter() - t0:.1f} s "
+                  f"({progress.size(nbytes)})" + (f", saved to {cache}" if cache else ""), quiet)
     return out
+
+
+def _download(url, data, timeout, host, where, quiet):
+    """One Overpass request, read in chunks so the bytes can be shown."""
+    with progress.wait(f"OpenStreetMap: asking {host} for {where}", quiet, delay=0) as w:
+        req = urllib.request.Request(url, data=data, headers={"User-Agent": "octreecity"})
+        with urllib.request.urlopen(req, timeout=timeout + 30) as r:
+            total = r.headers.get("Content-Length")
+            total = int(total) if total and total.isdigit() else None
+            w.set(f"OpenStreetMap: receiving from {host}")
+            chunks, n = [], 0
+            while True:
+                chunk = r.read(1 << 16)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                n += len(chunk)
+                w.extra = progress.size(n) + (f" of {progress.size(total)}" if total else "")
+    return json.loads(b"".join(chunks)), n
+
+
+def _why(exc):
+    """A short reason for a failed request."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"busy (HTTP {exc.code})" if exc.code in (429, 502, 503, 504) else f"failed (HTTP {exc.code})"
+    if isinstance(exc, TimeoutError) or "timed out" in str(exc):
+        return "timed out"
+    if isinstance(exc, urllib.error.URLError):
+        return f"cannot be reached ({exc.reason})"
+    if isinstance(exc, json.JSONDecodeError):
+        return "sent a broken answer"
+    return f"failed ({type(exc).__name__}: {exc})"
+
+
+def _osm_summary(osm):
+    """'2,314 buildings, 812 roads and paths, ...' from an Overpass answer."""
+    n = {"buildings": 0, "roads and paths": 0, "land-use areas": 0, "waterways": 0, "trees": 0}
+    for el in osm.get("elements", []):
+        t = el.get("tags") or {}
+        if "building" in t or "building:part" in t:
+            n["buildings"] += 1
+        elif "highway" in t:
+            n["roads and paths"] += 1
+        elif t.get("natural") == "tree" and el.get("type") == "node":
+            n["trees"] += 1
+        elif "waterway" in t:
+            n["waterways"] += 1
+        elif "landuse" in t or "leisure" in t or "natural" in t:
+            n["land-use areas"] += 1
+    parts = [f"{v:,} {k}" for k, v in n.items() if v]
+    return ", ".join(parts) if parts else "nothing found"
 
 
 def _subset(osm, test):
@@ -107,7 +177,8 @@ def _subset(osm, test):
 
 def city_from_osm(lat, lon, size_m=500.0, cell=1.0, cache=None, osm_json=None, buildings=None,
                   default_height=10.0, level_height=3.0, tree_height=12.0, air_above=20.0,
-                  city_cache=None, overlap="keep", bridge_height=5.0, buildings_namespace=None):
+                  city_cache=None, overlap="keep", bridge_height=5.0, buildings_namespace=None,
+                  quiet=None):
     """Build an Occupancy of a size_m square around (lat, lon) from OSM,
     with object ids (city.ids, city.objects; see the module docstring).
 
@@ -120,14 +191,18 @@ def city_from_osm(lat, lon, size_m=500.0, cell=1.0, cache=None, osm_json=None, b
     attrs "source_id" or "id" in buildings_namespace (a dataset name, e.g.
     "plateau-tokyo-2023"). overlap: what a voxel claimed by two objects of
     one kind gets ("keep" = an overlap row; "first", "last"). The city's
-    origin is in UTM metres; city.crs holds the EPSG code.
+    origin is in UTM metres; city.crs holds the EPSG code. Shows the
+    download and the build as they go; quiet=True shows nothing (see
+    octreecity.progress).
     """
     if city_cache is not None and Path(city_cache).exists():
         from .occupancy import Occupancy
 
-        return Occupancy.load(city_cache)
+        city = Occupancy.load(city_cache)
+        progress.note(f"city: using the saved city in {city_cache}, no download or build", quiet)
+        return city
     epsg = utm_epsg(lat, lon)
-    data = osm_json if osm_json is not None else fetch_osm(lat, lon, size_m, cache)
+    data = osm_json if osm_json is not None else fetch_osm(lat, lon, size_m, cache, quiet=quiet)
     osm = read_osm_overpass(data, crs_to=epsg, level_height=level_height)
     from pyproj import Transformer
 
@@ -136,7 +211,7 @@ def city_from_osm(lat, lon, size_m=500.0, cell=1.0, cache=None, osm_json=None, b
                     default_height=default_height, tree_height=tree_height, overlap=overlap,
                     bridge_height=bridge_height, buildings_namespace=buildings_namespace,
                     crs=f"EPSG:{epsg}")
-    city = b.build(air_above=air_above)
+    city = b.build(air_above=air_above, quiet=quiet)
     if city_cache is not None:
         Path(city_cache).parent.mkdir(parents=True, exist_ok=True)
         city.save(city_cache)

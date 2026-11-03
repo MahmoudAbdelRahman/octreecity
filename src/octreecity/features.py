@@ -7,6 +7,7 @@ all travel as Features; the builder decides how each becomes voxels.
 
 import gzip
 import json
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -60,20 +61,26 @@ class Features:
         return cls(geoms, height=[p[1] for p in pairs])
 
 
-def read_citygml(path, min_area=1.0):
+def read_citygml(path, min_area=1.0, quiet=None):
     """Buildings from CityGML 2.0/3.0 (LoD0-LoD2), streamed with iterparse.
 
     Footprint: union of the building's polygons projected to 2D (roof,
     ground, solid or lod0 surfaces). Base: the 'base_height_m' attribute if
     present, else the lowest z. Height: bldg:measuredHeight if present and
     plausible, else highest z - base. Coordinates stay in the file's CRS.
+    Shows a bar over the file's bytes on big files (quiet=True: never).
     """
     from lxml import etree
 
-    opener = gzip.open if str(path).endswith(".gz") else open
+    from . import progress
+
     geoms, heights, bases, ids = [], [], [], []
-    with opener(path, "rb") as f:
+    total = os.path.getsize(path)
+    with open(path, "rb") as raw, \
+            progress.bar(total, f"CityGML: {os.path.basename(str(path))}", "bytes", quiet) as bar:
+        f = gzip.GzipFile(fileobj=raw) if str(path).endswith(".gz") else raw
         for _, el in etree.iterparse(f, events=("end",), tag="{*}Building", huge_tree=True):
+            bar.update(raw.tell() - bar.n)
             polys, zs = [], []
             for pl in el.iter(f"{{{GML}}}posList"):
                 v = np.array(pl.text.split(), float)
@@ -113,6 +120,7 @@ def read_citygml(path, min_area=1.0):
             el.clear()
             while el.getprevious() is not None:
                 del el.getparent()[0]
+        bar.update(total - bar.n)
     return Features(geoms, heights, bases, attrs={"id": np.array(ids)})
 
 

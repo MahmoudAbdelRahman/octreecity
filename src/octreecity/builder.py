@@ -278,11 +278,15 @@ class CityBuilder:
                 low[k] = float(np.min(self._terrain_fn(x, y)))
         return low
 
-    def build(self, air_above=20.0, ground_thickness=None, nz=None, strip=16, prune=True, z0=None):
+    def build(self, air_above=20.0, ground_thickness=None, nz=None, strip=16, prune=True, z0=None,
+              quiet=None):
         """Occupancy with city.ids (one int64 per run per id layer) and
         city.objects. z = 0 is one ground_thickness (default one cell) below
         the lowest terrain point, or at z0 (metres) if given: give tiles the
-        same z0 and nz to join them. The box reaches air_above over the top."""
+        same z0 and nz to join them. The box reaches air_above over the top.
+        Shows a bar on long builds (quiet=True: never; see octreecity.progress)."""
+        from . import progress
+
         c = self.cell
         gt = c if ground_thickness is None else float(ground_thickness)
         z0 = float(self.terrain.min() - gt) if z0 is None else float(z0)
@@ -302,8 +306,13 @@ class CityBuilder:
         self.stats = {k: {"overlap_rows": 0, "overlap_voxels": 0, "max_members": 0,
                           "overwritten_voxels": 0, "voxels": 0} for k in self.layers}
         self._rows, self._new_rows = {}, set()
-        parts = [self._strip(ops, x0, min(self.nx, x0 + strip), nz, z0)
-                 for x0 in range(0, self.nx, strip)]
+        starts = range(0, self.nx, strip)
+        parts = []
+        label = f"city {self.nx * c:g} x {self.ny * c:g} m at {c:g} m"
+        with progress.bar(len(starts), label, "strips", quiet) as bar:
+            for x0 in starts:
+                parts.append(self._strip(ops, x0, min(self.nx, x0 + strip), nz, z0))
+                bar.update()
         city = Occupancy.concat_x(parts, c, (self.x0, self.y0, z0))
         city.ids = {k: city.ids.get(k, np.full(city.n_runs, NONE, np.int64)) for k in self.layers}
         city.crs, city.classes = self.crs, CLASSES

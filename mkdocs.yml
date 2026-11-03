@@ -27,6 +27,7 @@ nav:
       - Export: how-to/export.md
       - Save and reuse results: how-to/save-and-reuse.md
       - Run the notebook: how-to/run-the-notebook.md
+      - Progress messages: how-to/progress.md
   - Explanation:
       - How OctreeCity works: explanation/how-it-works.md
       - Cells for learning: explanation/cells-for-learning.md

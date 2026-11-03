@@ -82,8 +82,10 @@ def surface_quads(city, labels=None, x0=0, x1=None):
     return np.concatenate(quads), np.concatenate(labs)
 
 
-def write_obj(city, path, labels=None, names=None, colors=None, strip=256):
-    """Write the label boundaries as an OBJ (+ .mtl). Works in x strips."""
+def write_obj(city, path, labels=None, names=None, colors=None, strip=256, quiet=None):
+    """Write the label boundaries as an OBJ (+ .mtl). Works in x strips.
+    Shows a bar on long writes (quiet=True: never)."""
+    from . import progress
     from .urban import LABELS
 
     names = names or LABELS
@@ -92,9 +94,10 @@ def write_obj(city, path, labels=None, names=None, colors=None, strip=256):
     mtl = path.with_suffix(".mtl")
     present = set()
     nv = 0
-    with open(path, "w") as f:
+    starts = range(0, city.shape[0], strip)
+    with open(path, "w") as f, progress.bar(len(starts), f"OBJ: {path.name}", "strips", quiet) as bar:
         f.write(f"# octreecity surface mesh\nmtllib {mtl.name}\n")
-        for xs in range(0, city.shape[0], strip):
+        for xs in starts:
             q, lab = surface_quads(city, labels, xs, min(city.shape[0], xs + strip))
             for L in np.unique(lab):
                 sel = q[lab == L]
@@ -105,6 +108,7 @@ def write_obj(city, path, labels=None, names=None, colors=None, strip=256):
                 idx = nv + 1 + np.arange(len(v)).reshape(-1, 4)
                 np.savetxt(f, idx, fmt="f %d %d %d %d")
                 nv += len(v)
+            bar.update()
     with open(mtl, "w") as f:
         for L in sorted(present):
             r, g, b = colors.get(L, (0.8, 0.2, 0.2))
@@ -151,12 +155,20 @@ def tensors_3d(city, labels, factor=2):
     return out
 
 
-def write_vtk(tree, path, labels=None):
+def write_vtk(tree, path, labels=None, quiet=None):
     """Write leaves as VTK_HEXAHEDRON cells with 'label' and 'level' data.
 
     labels: optional list of labels to keep (e.g. only buildings, or only
     air to inspect the adaptive mesh). Points are not shared between cells.
+    Shows a bar on long writes (quiet=True: never).
     """
+    from . import progress
+
+    with progress.bar(4, f"VTK: {Path(path).name}", "parts", quiet) as bar:
+        _write_vtk(tree, path, labels, bar)
+
+
+def _write_vtk(tree, path, labels, bar):
     keep = np.ones(tree.n_leaves, bool) if labels is None else np.isin(tree.label, labels)
     x, y, z = (a[keep].astype(np.float64) for a in tree.corners())
     s = tree.sizes()[keep].astype(np.float64)
@@ -168,6 +180,7 @@ def write_vtk(tree, path, labels=None):
     pts[..., 0] = ox + h * (x[:, None] + corner[:, 0] * s[:, None])
     pts[..., 1] = oy + h * (y[:, None] + corner[:, 1] * s[:, None])
     pts[..., 2] = oz + h * (z[:, None] + corner[:, 2] * s[:, None])
+    bar.update()
     n = x.size
     cells = np.hstack([np.full((n, 1), 8), np.arange(8 * n).reshape(n, 8)]).astype(">i4")
     with open(path, "wb") as f:
@@ -175,12 +188,15 @@ def write_vtk(tree, path, labels=None):
                 b"DATASET UNSTRUCTURED_GRID\n")
         f.write(f"POINTS {8 * n} float\n".encode())
         f.write(pts.reshape(-1, 3).astype(">f4").tobytes())
+        bar.update()
         f.write(f"\nCELLS {n} {9 * n}\n".encode())
         f.write(cells.tobytes())
         f.write(f"\nCELL_TYPES {n}\n".encode())
         f.write(np.full(n, 12, ">i4").tobytes())
+        bar.update()
         f.write(f"\nCELL_DATA {n}\nSCALARS label int 1\nLOOKUP_TABLE default\n".encode())
         f.write(tree.label[keep].astype(">i4").tobytes())
         f.write(b"\nSCALARS level int 1\nLOOKUP_TABLE default\n")
         f.write(tree.level[keep].astype(">i4").tobytes())
         f.write(b"\n")
+    bar.update()

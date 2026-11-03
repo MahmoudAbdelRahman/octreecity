@@ -15,7 +15,7 @@ from .octree import LinearOctree, pad_to_multiple, rasterize_columns
 from .store import Store
 from .urban import AIR, BUILDING, GROUND, TREE
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 __all__ = ["build_city", "Classes", "EMPTY", "LinearOctree", "Mesh", "ObjectTable", "Occupancy",
            "Store", "object_id", "pad_to_multiple", "rasterize_columns", "read_mesh", "urban", "AIR",

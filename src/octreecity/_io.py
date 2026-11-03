@@ -11,7 +11,7 @@ import json
 
 import numpy as np
 
-FORMAT_VERSION = "0.4"
+FORMAT_VERSION = "0.5"   # 0.5: __meta__ holds the place on Earth; 0.4 files still load
 
 
 def pack_ids(key, values):

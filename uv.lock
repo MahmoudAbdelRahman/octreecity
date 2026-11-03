@@ -3165,6 +3165,7 @@ dependencies = [
     { name = "pyproj", version = "3.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pyproj", version = "3.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "pyproj", version = "3.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "s2cell" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -3221,6 +3222,7 @@ requires-dist = [
     { name = "plotly", marker = "extra == 'viz'", specifier = ">=6.0" },
     { name = "pyarrow", specifier = ">=14.0" },
     { name = "pyproj", specifier = ">=3.6" },
+    { name = "s2cell", specifier = ">=1.8" },
     { name = "scipy", specifier = ">=1.11" },
     { name = "shapely", specifier = ">=2.0" },
     { name = "torch", marker = "extra == 'torch'", specifier = ">=2.1" },
@@ -4401,6 +4403,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/a5/9672e532fe02cd3b92c78cfd8743abca939d96853006c63835009a1ecb6f/rpds_py-2026.9.1-pp312-pypy312_pp73-musllinux_1_2_x86_64.whl", hash = "sha256:6b9bf3135b4ad5981df9a73d71a35272d650a2985ae9c2746357b24d59de2448", size = 591126, upload-time = "2026-10-04T16:32:29.274Z" },
     { url = "https://files.pythonhosted.org/packages/80/ef/3a9f8e4279c7920af561deed4cb7ebebed2794a8f608cf404d5eef14a105/rpds_py-2026.9.1-pp312-pypy312_pp80-macosx_10_12_x86_64.whl", hash = "sha256:56c6952a9b15047466d0c2347c446a761d4527f89976156341e68f0ce5cc08b0", size = 357108, upload-time = "2026-10-04T16:32:31.641Z" },
     { url = "https://files.pythonhosted.org/packages/b7/55/4b2fa381a583760aea5c92841e4e928a358e1c6511b129219e9c2826a226/rpds_py-2026.9.1-pp312-pypy312_pp80-macosx_11_0_arm64.whl", hash = "sha256:b242c27c8f836305a4a72df9cdd564386ac57b807bd252a063223331c9316b37", size = 346877, upload-time = "2026-10-04T16:32:34.061Z" },
+]
+
+[[package]]
+name = "s2cell"
+version = "1.8.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/20/af36f1ea970ac6b1a9acb481d039d433a6f3add736b6a7630e840ac25652/s2cell-1.8.0.tar.gz", hash = "sha256:6ba0f06b2c9fe415259194295ef1e0794e18dafcb84880de5b6fa627c4a8eea8", size = 23404, upload-time = "2024-03-01T23:47:03.043Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/9c/af2c4e20b132c3351a2b026488c4ee2d515732315bc34d9a46f4b6db617b/s2cell-1.8.0-py3-none-any.whl", hash = "sha256:25b488fc8955b7919bc6477c9be38abce7793b70400dd3a1463e858dffb59568", size = 19240, upload-time = "2024-03-01T23:47:01.329Z" },
 ]
 
 [[package]]

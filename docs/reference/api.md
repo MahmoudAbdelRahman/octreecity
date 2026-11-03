@@ -11,7 +11,8 @@ Core (no domain words):
 | `octreecity.octree` | `LinearOctree`: cell table (`label`, `cells`, `series`, `add_snapshot`), `id_columns`, `crs`, `objects`, `parents` (`reduce`, `how="same"` for ids), `in_box`, `balance`, `refine_where`, `select`, `touching`, `near` |
 | `octreecity.objects` | `ObjectTable` (`add`, `add_overlap`, `merge`, `select`, `tag`, `parent`, `children`, `siblings`, `ancestors`, `descendants`, `save` / `load`), `object_id`, `IdCollision` |
 | `octreecity.query` | `Query`, `Group` (`neighbours`, `within`, `nearest`, `boundary`, `parents`, `siblings`, `objects`, `voxels`, `show`), `Nodes`, `neighbour_pairs`, `cube_ids` |
-| `octreecity.store` | `Store` (`create`, `open`, `write_tile`, `read_tile`, `read_tree`, `region`, `objects`, `edit_objects`, `build`, `compact`, `snapshot`), `round_tile` |
+| `octreecity.store` | `Store` (`create`, `open`, `write_tile`, `read_tile`, `read_tree`, `region`, `objects`, `edit_objects`, `build`, `compact`, `snapshot`, `place`, `place_table`, `add_places`), `round_tile` |
+| `octreecity.places` | `S2`, `near`, `find`, `blocks`, `split`, `concat`, `place`, `place_of`, `lonlat`, `distance_m`; `Occupancy.place()`, `LinearOctree.place()` |
 | `octreecity.fill` | `from_raster`, `from_grid`, `from_function`, `from_source`, `carry` |
 | `octreecity.links` | `Links`, `neighbours`, `hierarchy`, `across`, `within`, `face_pairs` |
 | `octreecity.learn` | `tokens`, `Tokens` (`concat`, `to_torch`, `save`), `pixel_map`, `batches`, `reach_m` |

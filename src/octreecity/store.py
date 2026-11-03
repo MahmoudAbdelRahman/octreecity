@@ -10,6 +10,8 @@
     store.region(0, 0, 2, 2)              # several tiles as one Occupancy
     store.snapshot("city.zip")            # a read-only copy in one file
     Store.open("city.zip").read_tile(0, 0)
+    store.place(0, 0)                     # where the tile is on Earth (see places)
+    store.place_table()                   # one row per tile: lon, lat, s2_13 ...
 
 Layout:
 
@@ -39,8 +41,14 @@ reading, the added parts are merged first, then the edits in order, so an
 edit stays in force when a tile is written again from the source data.
 compact() merges the parts that do not belong to a tile and deletes old
 files.
+
+Places: with a crs, each tile entry records where the tile is on Earth
+(its centre in lon/lat, its heights and a cell id per scheme; S2 level 13
+by default). See octreecity.places. Stores without places still open;
+add_places fills them in.
 """
 
+import io
 import json
 import os
 import time
@@ -50,12 +58,13 @@ from pathlib import Path
 
 import numpy as np
 
+from . import places as _places
 from .objects import ObjectTable
 from .occupancy import Occupancy
 from .octree import LinearOctree
 
 FORMAT = "octreecity.store"
-VERSION = 1
+VERSION = 2          # 2: tiles record their place (0.5); 1 still opens
 
 
 def round_tile(tile_m, voxel_size, max_level):
@@ -72,20 +81,28 @@ class StoreLocked(RuntimeError):
 class Store:
     """See the module docstring. Open with Store.open or Store.create."""
 
-    def __init__(self, path, manifest, zf=None):
+    def __init__(self, path, manifest, zf=None, places=()):
         self.path = Path(path)
         self._m = manifest
         self._zf = zf
+        self._schemes = list(places or ())
         self._objects = None
         self._objects_gen = None
 
     # ------------------------------------------------------------ open
     @classmethod
     def create(cls, path, voxel_size=1.0, max_level=5, tile_m=256.0, origin=(0.0, 0.0), crs=None,
-               columns=None):
+               columns=None, places=None):
         """A new empty store. tile_m rounds up (see round_tile). columns:
         {name: {"unit": ..., "description": ...}} for cell or object
-        columns, stored and never interpreted."""
+        columns, stored and never interpreted. places: the cell schemes
+        each tile records (octreecity.places); default [S2(13)] when crs
+        is set, none without crs."""
+        if places is None:
+            places = _places.default_schemes() if crs else []
+        places = list(places)
+        if places and not crs:
+            raise ValueError("places need a crs: without one the tiles have no place on Earth")
         root = Path(path)
         if root.suffix == ".zip":
             raise ValueError("a store is a folder; make a .zip with snapshot()")
@@ -97,23 +114,25 @@ class Store:
              "voxel_size": float(voxel_size), "max_level": int(max_level),
              "tile_m": round_tile(tile_m, voxel_size, max_level), "tile_m_asked": float(tile_m),
              "origin": [float(origin[0]), float(origin[1])], "layers": [], "objects": [],
-             "tiles": {}, "columns": columns or {},
+             "tiles": {}, "columns": columns or {}, "places": [_places.spec(p) for p in places],
              "units": {"voxel_size": "m", "tile_m": "m", "origin": "m"},
              "reserved_ids": {"-1": "no object", "-2": "mixed"}}
-        s = cls(root, m)
+        s = cls(root, m, places=places)
         s._write_manifest(m)
         return s
 
     @classmethod
-    def open(cls, path):
-        """A folder store, or a .zip snapshot (read-only)."""
+    def open(cls, path, places=()):
+        """A folder store, or a .zip snapshot (read-only). places: your own
+        scheme objects, needed to write tiles to a store whose places use
+        them (built-in schemes such as S2 need nothing)."""
         p = Path(path)
         if p.is_file() and zipfile.is_zipfile(p):
             zf = zipfile.ZipFile(p)
-            return cls(p, json.loads(zf.read("manifest.json")), zf)
+            return cls(p, json.loads(zf.read("manifest.json")), zf, places)
         if not (p / "manifest.json").exists():
             raise FileNotFoundError(f"{p} has no manifest.json: not a store, or it was never finished")
-        return cls(p, json.loads((p / "manifest.json").read_text()))
+        return cls(p, json.loads((p / "manifest.json").read_text()), places=places)
 
     def reload(self):
         """Re-read the manifest (to see other writers' changes)."""
@@ -166,6 +185,81 @@ class Store:
     def tile_of(self, x, y):
         x0, y0 = self._m["origin"]
         return int(np.floor((x - x0) / self.tile_m)), int(np.floor((y - y0) / self.tile_m))
+
+    # ------------------------------------------------------------ places
+    @property
+    def places(self):
+        """The schemes the tiles record, as {"scheme", "level"} entries."""
+        return list(self._m.get("places", []))
+
+    def place(self, i, j):
+        """Where tile (i, j) is on Earth: {"lonlat", "z_m", "places"}, or
+        None (no such tile, no crs, or a store written before 0.5: see
+        add_places)."""
+        e = self._m["tiles"].get(f"{i}_{j}")
+        return None if e is None else e.get("place")
+
+    def place_table(self, source=None):
+        """One row per tile (pyarrow): source, i, j, lon, lat, z_bottom_m,
+        z_top_m and one id column per scheme ("s2_13"). source names the
+        store in the table (default: its path); places.concat joins the
+        tables of several stores."""
+        name = str(self.path) if source is None else str(source)
+        return _places.table([{"source": name, "i": i, "j": j, "place": self.place(i, j)}
+                              for i, j in self.tiles])
+
+    def _schemes_for(self, specs):
+        out = []
+        for s in specs:
+            obj = _places.scheme_for(s, self._schemes)
+            if obj is None:
+                raise ValueError(f"this store records places under scheme {s['scheme']!r} level "
+                                 f"{s['level']}; pass that scheme to Store.open(path, places=[...])")
+            out.append(obj)
+        return out
+
+    def _tile_place(self, m, i, j, z0, nz):
+        if not m.get("crs"):
+            return None
+        h = m["voxel_size"]
+        return _places.place(m["crs"], self.tile_box(i, j), (z0, z0 + nz * h),
+                             self._schemes_for(m.get("places", [])))
+
+    def add_places(self, *schemes):
+        """Record these schemes (objects, e.g. S2(10)) for every tile, and
+        fill in the place of tiles that have none (stores written before
+        0.5). Changes only the manifest (heights are read from the tile
+        files once)."""
+        self._need_write()
+        if not self.crs:
+            raise ValueError("this store has no crs, so its tiles have no place on Earth")
+        self._schemes += [s for s in schemes if s not in self._schemes]
+        z0s = {k: self._tile_z0(e) for k, e in self._m["tiles"].items()}
+
+        def change(m):
+            have = m.setdefault("places", [])
+            for s in schemes:
+                if _places.spec(s) not in have:
+                    have.append(_places.spec(s))
+            for k, e in m["tiles"].items():
+                z0 = e.get("z0", z0s.get(k))
+                if z0 is None:
+                    z0 = self._tile_z0(e)
+                e["z0"] = z0
+                e["place"] = self._tile_place(m, *e["tile"], z0, e["nz"])
+        self._commit(change)
+        return self
+
+    def _tile_z0(self, e):
+        if "z0" in e:
+            return e["z0"]
+        f = self._open(e["occupancy"])
+        try:
+            d = np.load(io.BytesIO(f) if isinstance(f, bytes) else f, allow_pickle=False)
+            return float(d["origin"][2])
+        finally:
+            if hasattr(f, "close"):
+                f.close()
 
     # ------------------------------------------------------------ reading
     def _open(self, name):
@@ -294,9 +388,10 @@ class Store:
             raise ValueError(f"the tree's max_level {tree.max_level} is above the store's {self.max_level}")
         folder = f"tiles/{i}_{j}"
         (self.path / folder).mkdir(parents=True, exist_ok=True)
+        z0, nz = float(occupancy.origin[2]), int(occupancy.shape[2])
         e = {"tile": [i, j], "occupancy": self._unique(folder, "occupancy", ".npz"),
-             "layers": list(occupancy.ids), "runs": int(occupancy.n_runs), "nz": int(occupancy.shape[2])}
-        meta = {"tile": [i, j], "store": FORMAT}
+             "layers": list(occupancy.ids), "runs": int(occupancy.n_runs), "nz": nz, "z0": z0}
+        meta = {"tile": [i, j], "store": FORMAT, "place": self._tile_place(self._m, i, j, z0, nz)}
         occupancy.save(self.path / e["occupancy"], objects=False, meta=meta)
         if tree is not None:
             e["octree"] = self._unique(folder, "octree", ".npz")
@@ -308,6 +403,7 @@ class Store:
 
         def change(m):
             _drop_tile_part(m, i, j)                  # the tile's old rows go with its old version
+            e["place"] = self._tile_place(m, i, j, z0, nz)   # schemes as of now (add_places may run meanwhile)
             m["tiles"][f"{i}_{j}"] = e
             m["layers"] = list(dict.fromkeys(m["layers"] + e["layers"]))
             if part:
@@ -363,12 +459,12 @@ class Store:
         tiles = [tuple(t) for t in tiles]
         if workers <= 1:
             for i, j in tiles:
-                _build_job(str(self.path), func, i, j, kw)
+                _build_job(str(self.path), func, i, j, kw, self._schemes)
         else:
             from concurrent.futures import ProcessPoolExecutor
 
             with ProcessPoolExecutor(workers) as ex:
-                futs = [ex.submit(_build_job, str(self.path), func, i, j, kw) for i, j in tiles]
+                futs = [ex.submit(_build_job, str(self.path), func, i, j, kw, self._schemes) for i, j in tiles]
                 for f in futs:
                     f.result()
         self.reload()
@@ -488,8 +584,8 @@ def _add_columns(m, objects):
         m["columns"].setdefault(k, {}).update(v)
 
 
-def _build_job(path, func, i, j, kw):
-    store = Store.open(path)
+def _build_job(path, func, i, j, kw, places=()):
+    store = Store.open(path, places=places)
     out = func(store, i, j, **kw)
     if out is None:
         return None
